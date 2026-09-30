@@ -40,11 +40,6 @@ export default function LoginPage() {
     useState(false);
 
   const [
-    checkingSession,
-    setCheckingSession,
-  ] = useState(true);
-
-  const [
     errorMessage,
     setErrorMessage,
   ] = useState("");
@@ -54,23 +49,6 @@ export default function LoginPage() {
     setSuccessMessage,
   ] = useState("");
 
-  useEffect(() => {
-    async function checkSession() {
-      const {
-        data: { session },
-      } =
-        await supabase.auth.getSession();
-
-      if (session) {
-        router.replace("/");
-        return;
-      }
-
-      setCheckingSession(false);
-    }
-
-    checkSession();
-  }, [router]);
 
   function resetMessages() {
     setErrorMessage("");
@@ -357,16 +335,6 @@ export default function LoginPage() {
 
     setSuccessMessage(
       "密码重置邮件已经发送。如果该邮箱已注册，请打开邮箱中的链接继续重置密码。"
-    );
-  }
-
-  if (checkingSession) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 text-gray-900">
-        <p className="text-sm text-gray-400">
-          正在检查登录状态...
-        </p>
-      </main>
     );
   }
 
