@@ -231,7 +231,7 @@ export default function SettingsPage() {
                     </span>
 
                     <span className="font-medium">
-                      WeiS13💗双双
+                      WeiS
                     </span>
                   </div>
                 </div>
