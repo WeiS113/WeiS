@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
+}
+
+html {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* =========================
+   深色模式
+   ========================= */
+
+html.dark {
+  --background: #0f1115;
+  --foreground: #f3f4f6;
+}
+
+html.dark body {
+  background-color: #0f1115;
+  color: #f3f4f6;
+}
+
+/* 页面背景 */
+
+html.dark .bg-gray-50 {
+  background-color: #0f1115 !important;
+}
+
+html.dark .bg-white {
+  background-color: #181b21 !important;
+}
+
+html.dark .bg-gray-100 {
+  background-color: #252932 !important;
+}
+
+/* 文字 */
+
+html.dark .text-gray-900 {
+  color: #f3f4f6 !important;
+}
+
+html.dark .text-gray-700 {
+  color: #d1d5db !important;
+}
+
+html.dark .text-gray-500 {
+  color: #9ca3af !important;
+}
+
+html.dark .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+/* 边框 */
+
+html.dark .border,
+html.dark .border-r,
+html.dark .border-l,
+html.dark .border-t,
+html.dark .border-b,
+html.dark .border-gray-200 {
+  border-color: #30343d !important;
+}
+
+/* 表单 */
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #20242b !important;
+  color: #f3f4f6 !important;
+  border-color: #343943 !important;
+}
+
+html.dark input:disabled {
+  background-color: #252932 !important;
+  color: #9ca3af !important;
+}
+
+/* Hover */
+
+html.dark .hover\:bg-gray-50:hover {
+  background-color: #20242b !important;
+}
+
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #252932 !important;
+}
+
+/* 阴影稍微降低 */
+
+html.dark .shadow-sm {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.25) !important;
+}
