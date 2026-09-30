@@ -639,7 +639,7 @@ export default function ProjectsPage() {
                         addProject();
                       }
                     }}
-                    placeholder="例如：肠道血管化芯片"
+                    placeholder="例如：工作，生活"
                     className="flex-1 rounded-xl border px-4 py-3 outline-none focus:ring-2 focus:ring-black"
                   />
 
