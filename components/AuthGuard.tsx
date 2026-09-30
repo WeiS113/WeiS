@@ -23,12 +23,8 @@ type AuthGuardProps = {
 };
 
 const defaultProjects = [
-  "博士课题",
-  "BBB项目",
-  "生信分析",
-  "文献阅读",
+  "工作",
   "生活",
-  "未分类",
 ];
 
 export default function AuthGuard({
