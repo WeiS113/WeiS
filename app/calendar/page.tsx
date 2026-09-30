@@ -1122,7 +1122,7 @@ export default function CalendarPage() {
                               .value
                           )
                         }
-                        placeholder="标签，例如：实验, BBB, 文献"
+                        placeholder="标签，例如：工作，生活"
                         className="w-full rounded-xl border bg-white px-4 py-2"
                       />
 
@@ -1310,7 +1310,7 @@ export default function CalendarPage() {
                                       .value
                                   )
                                 }
-                                placeholder="标签，例如：实验, BBB, 文献"
+                                placeholder="标签，例如：工作，生活"
                                 className="w-full rounded-xl border px-4 py-2"
                               />
 
