@@ -1,3 +1,4 @@
+
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl =
@@ -8,5 +9,17 @@ const supabaseKey =
 
 export const supabase = createClient(
   supabaseUrl,
-  supabaseKey
+  supabaseKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "weis-auth-session",
+      storage:
+        typeof window !== "undefined"
+          ? window.localStorage
+          : undefined,
+    },
+  }
 );
