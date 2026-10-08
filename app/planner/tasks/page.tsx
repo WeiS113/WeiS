@@ -7,8 +7,8 @@ import {
   useState,
 } from "react";
 
-import Sidebar from "../../components/Sidebar";
-import { supabase } from "../../lib/supabase";
+import Sidebar from "../../../components/Sidebar";
+import { supabase } from "../../../lib/supabase";
 
 type Task = {
   id: number;
