@@ -16,6 +16,12 @@ const lifeSections = [
     href: "/life/journal",
     color: "from-violet-100 to-blue-100",
   },
+   {
+    title: "Calendar",
+    description: "按日期回顾生活的点点滴滴",
+    icon: "▦",
+    href: "/life/calendar",
+    color: "from-sky-100 to-indigo-100",
 ];
 
 export default function LifePage() {
@@ -65,7 +71,11 @@ export default function LifePage() {
             <Link
               key={section.title}
               href={section.href}
-              className="group rounded-[28px] border border-white/80 bg-white/65 p-6 shadow-sm backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:bg-white/90"
+              
+              className={`group rounded-[28px] border border-white/80 bg-white/65 p-6 shadow-sm backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:bg-white/90 ${
+                section.title === "Calendar" ? "sm:col-span-2" : ""
+              }`}
+
             >
               <div
                 className={`mb-7 flex h-20 w-20 items-center justify-center rounded-[24px] bg-gradient-to-br ${section.color}`}
