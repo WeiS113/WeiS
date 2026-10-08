@@ -22,6 +22,7 @@ const lifeSections = [
     icon: "▦",
     href: "/life/calendar",
     color: "from-sky-100 to-indigo-100",
+  },
 ];
 
 export default function LifePage() {
