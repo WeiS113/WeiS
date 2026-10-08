@@ -177,6 +177,8 @@ export default function MomentsPage() {
 
     const entryId = crypto.randomUUID();
     const paths: string[] = [];
+    
+    let entrySaved = false;
 
     try {
       for (const file of files) {
@@ -215,19 +217,25 @@ export default function MomentsPage() {
           image_paths: paths,
         });
 
+      
       if (error) throw error;
-
+      
+      entrySaved = true;
+      
       setContent("");
       setMood("");
       setFiles([]);
       await loadMoments(userId);
+
     } catch (err) {
       // 发布失败时清理本次已经上传的照片
-      if (paths.length > 0) {
+      
+      if (!entrySaved && paths.length > 0) {
         await supabase.storage
           .from(BUCKET)
           .remove(paths);
       }
+
 
       setError(
         err instanceof Error ? err.message : "发布失败"
