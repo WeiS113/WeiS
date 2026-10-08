@@ -351,11 +351,17 @@ export default function JournalPage() {
             </button>
           )}
 
+          
           {loading ? (
             <p className="py-12 text-center text-slate-400">
               正在加载日记...
             </p>
+          ) : error ? (
+            <div className="rounded-3xl bg-red-50 p-8 text-center text-sm text-red-600">
+              日记加载或操作出现问题，请查看上方错误提示。
+            </div>
           ) : visibleEntries.length === 0 ? (
+
             <div className="rounded-3xl bg-white/70 p-10 text-center text-sm text-slate-400">
               还没有日记，写下你的第一篇吧 ♡
             </div>
