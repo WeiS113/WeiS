@@ -67,7 +67,9 @@ export default function LifePage() {
         </section>
 
         {/* 功能入口 */}
-        <section className="mb-10 grid gap-5 sm:grid-cols-2">
+        
+        <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+
           {lifeSections.map((section) => (
             <Link
               key={section.title}
