@@ -283,11 +283,17 @@ export default function LifeCalendarPage() {
             </span>
           </div>
 
+          
           {loading ? (
             <p className="py-10 text-center text-slate-400">
               正在加载回忆...
             </p>
+          ) : error ? (
+            <div className="rounded-3xl bg-red-50 p-8 text-center text-sm text-red-600">
+              生活记录加载失败，请查看上方错误提示。
+            </div>
           ) : selectedEntries.length === 0 ? (
+
             <div className="rounded-3xl bg-white/70 p-10 text-center text-sm text-slate-400">
               这一天还没有生活记录 ♡
             </div>
