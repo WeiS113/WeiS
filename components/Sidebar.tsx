@@ -234,9 +234,20 @@ export default function Sidebar() {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-white p-6 md:flex">
-        <h1 className="mb-8 text-2xl font-bold">
-          WeiS Planner
-        </h1>
+        <div className="mb-8">
+          <Link
+            href="/"
+            className="mb-4 inline-flex items-center gap-2 text-sm text-gray-400 transition hover:text-gray-800"
+          >
+            <span>←</span>
+            <span>返回 WeiS</span>
+          </Link>
+        
+          <h1 className="text-2xl font-bold">
+            WeiS Planner
+          </h1>
+        </div>
+
 
         <nav className="space-y-2">
           {navItems.map((item) => {
