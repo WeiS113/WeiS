@@ -48,6 +48,11 @@ export default function MomentsPage() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editMood, setEditMood] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   async function loadMoments(uid: string) {
     const { data, error } = await supabase
       .from("life_entries")
@@ -232,6 +237,70 @@ export default function MomentsPage() {
     }
   }
 
+function startEdit(moment: Moment) {
+  setEditingId(moment.id);
+  setEditContent(moment.content);
+  setEditMood(moment.mood ?? "");
+  setError("");
+}
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditContent("");
+    setEditMood("");
+  }
+  
+  async function saveEdit(moment: Moment) {
+    if (savingEdit || !userId) return;
+  
+    const newContent = editContent.trim();
+  
+    if (!newContent && moment.image_paths.length === 0) {
+      alert("动态需要保留文字或至少一张照片");
+      return;
+    }
+  
+    setSavingEdit(true);
+    setError("");
+  
+    try {
+      const { error } = await supabase
+        .from("life_entries")
+        .update({
+          content: newContent,
+          mood: editMood || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", moment.id)
+        .eq("user_id", userId)
+        .eq("entry_type", "moment");
+  
+      if (error) throw error;
+  
+      setMoments((current) =>
+        current.map((item) =>
+          item.id === moment.id
+            ? {
+                ...item,
+                content: newContent,
+                mood: editMood || null,
+              }
+            : item
+        )
+      );
+  
+      cancelEdit();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "保存修改失败"
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function deleteMoment(moment: Moment) {
     if (!window.confirm("确定删除这条动态吗？"))
       return;
@@ -381,13 +450,76 @@ export default function MomentsPage() {
                       moment.created_at
                     ).toLocaleString("zh-CN")}
                   </time>
-                  <button
-                    onClick={() => deleteMoment(moment)}
-                    className="text-xs text-rose-400"
-                  >
-                    删除
-                  </button>
+        
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(moment)}
+                      className="text-xs text-blue-500"
+                    >
+                      编辑
+                    </button>
+                  
+                    <button
+                      type="button"
+                      onClick={() => deleteMoment(moment)}
+                      className="text-xs text-rose-400"
+                    >
+                      删除
+                    </button>
+                  </div>
+
                 </div>
+
+                {editingId === moment.id && (
+                  <div className="mb-5 space-y-3 rounded-2xl bg-rose-50/70 p-4">
+                    <h3 className="text-sm font-semibold">
+                      编辑动态
+                    </h3>
+                
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={4}
+                      maxLength={10000}
+                      className="w-full resize-none rounded-xl border border-rose-100 bg-white p-3 text-sm outline-none"
+                      placeholder="记录这一刻..."
+                    />
+                
+                    <select
+                      value={editMood}
+                      onChange={(e) => setEditMood(e.target.value)}
+                      className="w-full rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">不选择心情</option>
+                      {moods.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={savingEdit}
+                        className="rounded-xl border bg-white px-4 py-2 text-sm disabled:opacity-50"
+                      >
+                        取消
+                      </button>
+                
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(moment)}
+                        disabled={savingEdit}
+                        className="rounded-xl bg-rose-500 px-4 py-2 text-sm text-white disabled:opacity-50"
+                      >
+                        {savingEdit ? "保存中..." : "保存修改"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {moment.mood && (
                   <p className="mb-3 text-sm">
