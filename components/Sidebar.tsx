@@ -19,13 +19,15 @@ type NavItem = {
   icon: "today" | "calendar" | "tasks" | "projects" | "settings";
 };
 
+
 const defaultNavItems: NavItem[] = [
-  { name: "今天", href: "/", icon: "today" },
-  { name: "日历", href: "/calendar", icon: "calendar" },
-  { name: "待办", href: "/tasks", icon: "tasks" },
-  { name: "项目", href: "/projects", icon: "projects" },
-  { name: "设置", href: "/settings", icon: "settings" },
+  { name: "今天", href: "/planner", icon: "today" },
+  { name: "日历", href: "/planner/calendar", icon: "calendar" },
+  { name: "待办", href: "/planner/tasks", icon: "tasks" },
+  { name: "项目", href: "/planner/projects", icon: "projects" },
+  { name: "设置", href: "/planner/settings", icon: "settings" },
 ];
+
 
 const STORAGE_KEY = "WeiS-planner-sidebar-order";
 
