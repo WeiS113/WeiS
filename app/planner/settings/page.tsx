@@ -1,99 +1,244 @@
-
 "use client";
 
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import Sidebar from "../../../components/Sidebar";
 
-const modules = [
-  {
-    title: "Planner",
-    subtitle: "Make every day count.",
-    description: "计划 · 任务 · 日历",
-    href: "/planner",
-    symbol: "✦",
-    colors:
-      "from-blue-200/70 via-indigo-100/60 to-violet-200/70",
-    symbolColor: "text-indigo-600",
-  },
-  {
-    title: "Life",
-    subtitle: "Collect your little moments.",
-    description: "生活 · 动态 · 日记",
-    href: "/life",
-    symbol: "♡",
-    colors:
-      "from-rose-200/70 via-orange-100/60 to-amber-200/70",
-    symbolColor: "text-rose-500",
-  },
-];
+type Theme = "light" | "dark" | "system";
 
-export default function Home() {
+export default function SettingsPage() {
+  const [theme, setTheme] =
+    useState<Theme>("light");
+
+  const [mounted, setMounted] =
+    useState(false);
+
+  useEffect(() => {
+    const savedTheme =
+      localStorage.getItem(
+        "WeiS-planner-theme"
+      ) as Theme | null;
+
+    const initialTheme =
+      savedTheme || "light";
+
+    setTheme(initialTheme);
+
+    applyTheme(initialTheme);
+
+    setMounted(true);
+  }, []);
+
+  function applyTheme(
+    selectedTheme: Theme
+  ) {
+    const root =
+      document.documentElement;
+
+    if (selectedTheme === "dark") {
+      root.classList.add("dark");
+      return;
+    }
+
+    if (selectedTheme === "light") {
+      root.classList.remove("dark");
+      return;
+    }
+
+    const prefersDark =
+      window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches;
+
+    if (prefersDark) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  }
+
+  function changeTheme(
+    newTheme: Theme
+  ) {
+    setTheme(newTheme);
+
+    localStorage.setItem(
+      "WeiS-planner-theme",
+      newTheme
+    );
+
+    applyTheme(newTheme);
+  }
+
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f4f5f9] px-5 py-12 text-slate-800">
-      {/* 柔和背景光晕 */}
-      <div className="pointer-events-none absolute -left-32 -top-24 h-96 w-96 rounded-full bg-blue-200/50 blur-[100px]" />
-      <div className="pointer-events-none absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-pink-200/60 blur-[100px]" />
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      <div className="flex min-h-screen">
+        <Sidebar />
 
-      <div className="relative z-10 mx-auto w-full max-w-3xl">
-        {/* 网站标题 */}
-        <header className="mb-12 text-center">
-          <p className="mb-3 text-xs font-medium tracking-[0.35em] text-slate-400">
-            YOUR PERSONAL SPACE
-          </p>
+        <section className="flex-1 p-10">
+          <div className="mx-auto max-w-4xl">
+            <div className="mb-8">
+              <h2 className="text-4xl font-bold">
+                设置
+              </h2>
 
-          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">
-            WeiS
-          </h1>
+              <p className="mt-2 text-gray-500">
+                调整 WeiS Planner 的显示和使用方式。
+              </p>
+            </div>
 
-          <p className="mt-5 text-sm text-slate-500">
-            Plan your days. Capture your life.
-          </p>
-        </header>
+            <div className="space-y-6">
+              <section className="rounded-3xl bg-white p-6 shadow-sm">
+                <div className="mb-5">
+                  <h3 className="text-xl font-semibold">
+                    外观
+                  </h3>
 
-        {/* 两个模块 */}
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {modules.map((module) => (
-            <Link
-              key={module.title}
-              href={module.href}
-              className="group relative overflow-hidden rounded-[32px] border border-white/80 bg-white/55 p-6 shadow-[0_15px_55px_rgba(50,60,100,0.08)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:bg-white/75 hover:shadow-xl active:scale-[0.98] sm:p-8"
-            >
-              {/* 模块图标 */}
-              <div
-                className={`mb-8 flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br ${module.colors} shadow-inner`}
-              >
-                <span
-                  className={`text-5xl font-light ${module.symbolColor}`}
-                >
-                  {module.symbol}
-                </span>
-              </div>
-
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-3xl font-semibold tracking-tight">
-                    {module.title}
-                  </h2>
-
-                  <p className="mt-2 text-sm text-slate-500">
-                    {module.subtitle}
-                  </p>
-
-                  <p className="mt-5 text-xs tracking-wider text-slate-400">
-                    {module.description}
+                  <p className="mt-1 text-sm text-gray-500">
+                    选择你喜欢的界面主题。
                   </p>
                 </div>
 
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white bg-white/65 text-xl transition-transform group-hover:translate-x-1">
-                  ↗
-                </span>
-              </div>
-            </Link>
-          ))}
-        </section>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <button
+                    onClick={() =>
+                      changeTheme("light")
+                    }
+                    className={`rounded-2xl border p-5 text-left transition ${
+                      theme === "light"
+                        ? "border-black bg-gray-100"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="mb-4 h-20 rounded-xl border bg-white p-3">
+                      <div className="mb-2 h-3 w-16 rounded bg-gray-200" />
+                      <div className="h-8 rounded bg-gray-100" />
+                    </div>
 
-        <footer className="mt-12 text-center text-xs tracking-wider text-slate-400">
-          Your moments, your rhythm.
-        </footer>
+                    <p className="font-medium">
+                      浅色
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      明亮简洁的默认主题
+                    </p>
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      changeTheme("dark")
+                    }
+                    className={`rounded-2xl border p-5 text-left transition ${
+                      theme === "dark"
+                        ? "border-black bg-gray-100"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="mb-4 h-20 rounded-xl bg-gray-900 p-3">
+                      <div className="mb-2 h-3 w-16 rounded bg-gray-600" />
+                      <div className="h-8 rounded bg-gray-700" />
+                    </div>
+
+                    <p className="font-medium">
+                      深色
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      夜间使用更舒适
+                    </p>
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      changeTheme("system")
+                    }
+                    className={`rounded-2xl border p-5 text-left transition ${
+                      theme === "system"
+                        ? "border-black bg-gray-100"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="mb-4 flex h-20 overflow-hidden rounded-xl border">
+                      <div className="w-1/2 bg-white" />
+                      <div className="w-1/2 bg-gray-900" />
+                    </div>
+
+                    <p className="font-medium">
+                      跟随系统
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      自动匹配电脑主题
+                    </p>
+                  </button>
+                </div>
+              </section>
+
+              <section className="rounded-3xl bg-white p-6 shadow-sm">
+                <h3 className="text-xl font-semibold">
+                  当前版本
+                </h3>
+
+                <div className="mt-5 space-y-3 text-sm">
+                  <div className="flex justify-between border-b pb-3">
+                    <span className="text-gray-500">
+                      应用名称
+                    </span>
+
+                    <span>
+                      WeiS Planner
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between border-b pb-3">
+                    <span className="text-gray-500">
+                      数据存储
+                    </span>
+
+                    <span>
+                      Supabase Cloud
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">
+                      版本
+                    </span>
+
+                    <span>
+                      1.0.0
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl bg-white p-6 shadow-sm">
+                <h3 className="text-xl font-semibold">
+                  开发者信息
+                </h3>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  WeiS Planner 的开发与维护信息。
+                </p>
+
+                <div className="mt-5">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">
+                      开发者
+                    </span>
+
+                    <span className="font-medium">
+                      WeiS
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
