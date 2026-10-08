@@ -346,6 +346,23 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
+      
+      {/* Mobile module header */}
+      <header className="flex items-center justify-between border-b border-white/60 bg-white/75 px-5 py-3 backdrop-blur-xl md:hidden">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-600"
+        >
+          <span>‹</span>
+          <span>WeiS</span>
+        </Link>
+      
+        <span className="text-sm font-semibold text-gray-900">
+          Planner
+        </span>
+      
+        <div className="w-12" />
+      </header>
 
       {/* iOS-style mobile tab bar */}
       <nav
