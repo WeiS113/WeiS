@@ -57,11 +57,28 @@ export default function JournalPage() {
   }
   async function saveEntry() {
     if (!userId || saving) return;
-    const cleanTitle = title.trim(), cleanBody = body.trim();
-    if (!cleanTitle || !cleanBody) { setActionError("请填写日记标题和正文"); return; }
-    if (!date) { setActionError("请选择日期"); return; }
-    setSaving(true); setActionError("");
-    const fullContent = `${cleanTitle}\n\n${cleanBody}`;
+    
+const cleanTitle = title.trim();
+const cleanBody = body.trim();
+
+// 标题和正文只需要填写其中一项
+if (!cleanTitle && !cleanBody) {
+  setActionError("请填写标题或正文");
+  return;
+}
+
+if (!date) {
+  setActionError("请选择日期");
+  return;
+}
+
+setSaving(true);
+setActionError("");
+
+const fullContent = [cleanTitle, cleanBody]
+  .filter(Boolean)
+  .join("\n\n");
+
     try {
       if (editingId) {
         const { error } = await supabase.from("life_entries")
