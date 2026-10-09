@@ -74,7 +74,24 @@ export default function LifeCalendarPage() {
   return (
     <main className="min-h-screen bg-[#f8f5fa] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-3xl">
-        <header className="mb-8 flex items-center justify-between"><Link href="/life" className="rounded-full bg-white/80 px-4 py-2 text-sm">← Life</Link><h1 className="text-lg font-semibold">Life Calendar</h1><span className="text-xl text-violet-400">♡</span></header>
+        <header className="mb-8 flex items-center justify-between">
+<header className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+  <Link
+    href="/life"
+    className="justify-self-start whitespace-nowrap rounded-full bg-white/80 px-4 py-2 text-sm"
+  >
+    ← Life
+  </Link>
+
+  <h1 className="text-center text-lg font-semibold">
+    Life Calendar
+  </h1>
+
+  <span className="justify-self-end text-xl text-violet-400">
+    ♡
+  </span>
+</header>
+
         <section className="rounded-[30px] border border-white bg-white/80 p-4 shadow-sm sm:p-7">
           <p className="mb-2 text-xs tracking-[0.25em] text-violet-400">YOUR MEMORIES</p>
           <div className="mb-6 flex items-center justify-between"><button type="button" aria-label="上个月" onClick={() => changeMonth(-1)} className="rounded-xl bg-slate-50 px-4 py-2">←</button><h2 className="text-base font-semibold sm:text-lg">{year} 年 {month + 1} 月</h2><button type="button" aria-label="下个月" onClick={() => changeMonth(1)} className="rounded-xl bg-slate-50 px-4 py-2">→</button></div>
