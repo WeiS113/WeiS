@@ -162,18 +162,24 @@ export default function ShareUserPage() {
   return (
     <main className="min-h-screen bg-[#f9f5f6] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-2xl">
-        <header className="mb-8 flex items-center justify-between">
-          <Link
-            href="/life/share"
-            className="rounded-full bg-white/80 px-4 py-2 text-sm"
-          >
-            ← Daily Share
-          </Link>
-          <h1 className="text-lg font-semibold">
-            用户主页
-          </h1>
-          <span className="text-rose-400">♡</span>
-        </header>
+       
+<header className="relative mb-8 flex min-h-11 items-center justify-between">
+  <Link
+    href="/life/share"
+    className="relative z-10 rounded-full bg-white/80 px-4 py-2 text-sm"
+  >
+    ← Daily Share
+  </Link>
+
+  <h1 className="pointer-events-none absolute inset-x-0 text-center text-lg font-semibold">
+    用户主页
+  </h1>
+
+  <span className="relative z-10 text-rose-400">
+    ♡
+  </span>
+</header>
+
 
         {loading && (
           <p className="text-center text-slate-400">
