@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "../../../lib/supabase";
-
+import ShareComments from "../../../components/ShareComments";
 type Share = {
   id: string;
   user_id: string;
@@ -582,9 +582,10 @@ export default function DailySharePage() {
                     </div>
                   )}
 
-                  <div className="mt-5 border-t border-slate-100 pt-3 text-xs text-slate-400">
-                    评论功能即将开放 ♡
-                  </div>
+                  <ShareComments
+                    shareId={share.id}
+                    currentUserId={userId}
+                  />
                 </article>
               );
             })}
