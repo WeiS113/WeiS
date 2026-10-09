@@ -2,7 +2,8 @@
 "use client";
 
 import Link from "next/link";
-
+import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabase";
 const modules = [
   {
     title: "Planner",
@@ -26,8 +27,24 @@ const modules = [
   },
 ];
 
+
 export default function Home() {
+  const router = useRouter();
+
+  async function handleLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      alert("退出登录失败：" + error.message);
+      return;
+    }
+
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
+
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f4f5f9] px-5 py-12 text-slate-800">
       {/* 柔和背景光晕 */}
       <div className="pointer-events-none absolute -left-32 -top-24 h-96 w-96 rounded-full bg-blue-200/50 blur-[100px]" />
@@ -90,6 +107,17 @@ export default function Home() {
             </Link>
           ))}
         </section>
+
+        <div className="mt-8 flex justify-center">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full max-w-[220px] items-center justify-center gap-2 rounded-2xl border border-white/80 bg-white/70 px-6 py-3.5 text-sm font-medium text-slate-600 shadow-sm backdrop-blur-xl transition hover:bg-white hover:text-rose-500 active:scale-[0.98]"
+          >
+            <span aria-hidden="true">↪</span>
+            退出登录
+          </button>
+        </div>
 
         <footer className="mt-12 text-center text-xs tracking-wider text-slate-400">
           Your moments, your rhythm.
