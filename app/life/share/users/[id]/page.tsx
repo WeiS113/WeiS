@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../../../../../lib/supabase";
+import VerifiedBadge from "../../../../../components/VerifiedBadge";
 
 type Profile = {
   user_id: string;
   display_name: string;
   bio: string;
   avatar_path: string | null;
+  is_verified: boolean;
 };
+
 
 type Share = {
   id: string;
@@ -73,7 +76,7 @@ export default function ShareUserPage() {
         const { data: person, error: profileError } =
           await supabase
             .from("share_profiles")
-            .select("user_id,display_name,bio,avatar_path")
+            .select("user_id,display_name,bio,avatar_path,is_verified")
             .eq("user_id", userId)
             .maybeSingle();
 
@@ -200,9 +203,17 @@ export default function ShareUserPage() {
                 )}
               </div>
 
-              <h2 className="mt-4 text-2xl font-semibold">
-                {profile.display_name}
-              </h2>
+             
+<div className="mt-4 flex items-center justify-center gap-2">
+  <h2 className="text-2xl font-semibold">
+    {profile.display_name}
+  </h2>
+
+  {profile.is_verified === true && (
+    <VerifiedBadge size={24} />
+  )}
+</div>
+
 
               <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-500">
                 {profile.bio || "这个人还没有填写个性签名 ♡"}
