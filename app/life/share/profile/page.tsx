@@ -223,18 +223,24 @@ export default function ShareProfilePage() {
   return (
     <main className="min-h-screen bg-[#f9f5f6] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-xl">
-        <header className="mb-8 flex items-center justify-between">
+        
+        <header className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <Link
             href="/life/share"
-            className="rounded-full bg-white/80 px-4 py-2 text-sm"
+            className="justify-self-start whitespace-nowrap rounded-full bg-white/80 px-4 py-2 text-sm"
           >
             ← Daily Share
           </Link>
-          <h1 className="text-lg font-semibold">
+        
+          <h1 className="text-center text-lg font-semibold whitespace-nowrap">
             我的个人资料
           </h1>
-          <span className="text-rose-400">♡</span>
+        
+          <span className="justify-self-end text-rose-400">
+            ♡
+          </span>
         </header>
+
 
         <section className="rounded-[30px] border border-white bg-white/80 p-6 shadow-sm sm:p-8">
           <div className="mb-8 flex flex-col items-center gap-3">
