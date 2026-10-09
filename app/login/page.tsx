@@ -275,7 +275,7 @@ export default function LoginPage() {
       setInviteCode("");
 
       setSuccessMessage(
-        "账户已经创建成功，请使用刚才的邮箱和密码登录。"
+        "账户已经创建成功，请使用注册的邮箱和密码登录。"
       );
 
       return;
@@ -343,12 +343,12 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold">
-            WeiS Planner
+            WeiS Space
           </h1>
 
           <p className="mt-3 text-gray-500">
             {mode === "login" &&
-              "登录你的个人计划空间"}
+              "登录你的个人空间"}
 
             {mode === "register" &&
               "使用邀请码创建账户"}
@@ -592,14 +592,15 @@ export default function LoginPage() {
             <p className="mt-6 text-center text-xs text-gray-400">
               {mode ===
               "register"
-                ? "邀请码由 WeiS Planner 管理员提供"
+                ? "邀请码由 WeiS Space 管理员提供"
                 : "还没有账号？点击上方“注册”"}
             </p>
           )}
         </div>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          WeiS Planner · Personal Workspace
+          WeiS Space · Personal Workspace
+          网站所有功能仅对授权用户开放
         </p>
       </div>
     </main>
