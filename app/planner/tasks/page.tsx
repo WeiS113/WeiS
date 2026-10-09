@@ -887,7 +887,9 @@ export default function TasksPage() {
             toggleTask(task)
           }
           
-          className={`planner-task-checkbox mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+          
+          className={`planner-task-checkbox mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition ${
+
 
             task.completed
               ? "border-black bg-black text-white"
