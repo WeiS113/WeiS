@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-
+import VerifiedBadge from "./VerifiedBadge";
 type Comment = {
   id: string;
   share_id: string;
@@ -15,6 +15,7 @@ type Comment = {
 
 type Profile = {
   user_id: string;
+  is_verified: boolean;
   display_name: string;
   avatar_path: string | null;
 };
@@ -74,7 +75,7 @@ export default function ShareComments({
       const { data: users, error: profileError } =
         await supabase
           .from("share_profiles")
-          .select("user_id,display_name,avatar_path")
+          .select("user_id,display_name,avatar_path,is_verified")
           .in("user_id", ids);
 
       if (profileError) throw profileError;
@@ -291,20 +292,24 @@ export default function ShareComments({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">
-          <Link
-            href={`/life/share/users/${comment.user_id}`}
-            className="hover:text-rose-500"
-          >
-            {profile?.display_name ?? "WeiS User"}
-          </Link>
+          <div className="flex flex-wrap items-center gap-1.5 text-sm">
+            <Link
+              href={`/life/share/users/${comment.user_id}`}
+              className="font-semibold hover:text-rose-500"
+            >
+              {profile?.display_name ?? "WeiS User"}
+            </Link>
+
+            {profile?.is_verified === true && (
+              <VerifiedBadge size={16} />
+            )}
 
             {parent && (
-              <span className="font-normal text-slate-400">
-                {" "}回复 {nameOf(parent.user_id)}
+              <span className="text-slate-400">
+                回复 {nameOf(parent.user_id)}
               </span>
             )}
-          </p>
+          </div>
 
           <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6">
             {comment.content}
