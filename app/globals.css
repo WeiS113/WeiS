@@ -309,3 +309,67 @@ html.dark .shadow-sm {
     border-top-color: var(--ios-separator);
   }
 }
+
+/* ========================================
+   WeiS 2.0 - Planner mobile layout fix
+   ======================================== */
+
+@media (max-width: 767px) {
+
+  /* Prevent horizontal overflow */
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  /* Planner pages must occupy mobile viewport */
+  main:has(.ios-tabbar) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Fix the horizontal parent layout */
+  main:has(.ios-tabbar) > .flex.min-h-screen,
+  main.flex.min-h-screen:has(.ios-tabbar) {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* Take mobile header out of horizontal flex flow */
+  main:has(.ios-tabbar) header.md\:hidden {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    width: 100%;
+    min-height: 56px;
+    box-sizing: border-box;
+  }
+
+  /* All Planner content, including Tasks */
+  main:has(.ios-tabbar) section.flex-1 {
+    min-width: 0;
+    width: 100%;
+    padding: 76px 16px
+      calc(94px + env(safe-area-inset-bottom))
+      !important;
+  }
+
+  /* Tasks has another inner content container */
+  main:has(.ios-tabbar) section.flex-1 > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Prevent wide cards from expanding the screen */
+  main:has(.ios-tabbar) .grid,
+  main:has(.ios-tabbar) .flex-1 {
+    min-width: 0;
+  }
+}
