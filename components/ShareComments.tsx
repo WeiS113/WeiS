@@ -1,6 +1,6 @@
 
 "use client";
-
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -291,8 +291,14 @@ export default function ShareComments({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">
+          
+          <Link
+            href={`/life/share/users/${comment.user_id}`}
+            className="hover:text-rose-500"
+          >
             {profile?.display_name ?? "WeiS User"}
+          </Link>
+
             {parent && (
               <span className="font-normal text-slate-400">
                 {" "}回复 {nameOf(parent.user_id)}
