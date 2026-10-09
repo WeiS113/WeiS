@@ -291,7 +291,7 @@ export default function ShareComments({
         </div>
 
         <div className="min-w-0 flex-1">
-          
+          <p className="text-sm font-semibold">
           <Link
             href={`/life/share/users/${comment.user_id}`}
             className="hover:text-rose-500"
