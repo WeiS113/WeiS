@@ -5,9 +5,9 @@ import AuthGuard from "../components/AuthGuard";
 import RealtimeSync from "../components/RealtimeSync";
 
 export const metadata: Metadata = {
-  title: "WeiS Planner",
+  title: "WeiS Space",
   description:
-    "WeiS's personal cloud planner",
+    "WeiS's personal cloud space",
 };
 
 export default function RootLayout({
