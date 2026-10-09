@@ -94,7 +94,7 @@ export default function JournalPage() {
   return (
     <main className="min-h-screen bg-[#f7f5fa] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-3xl">
-        <header className="mb-8 flex items-center justify-between">
+       
 <header className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
   <Link
     href="/life"
