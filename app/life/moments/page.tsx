@@ -140,7 +140,24 @@ export default function MomentsPage() {
   return (
     <main className="min-h-screen bg-[#f9f5f6] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-2xl">
-        <header className="mb-8 flex items-center justify-between"><Link href="/life" className="rounded-full bg-white/70 px-4 py-2 text-sm">← Life</Link><h1 className="text-xl font-semibold">Moments</h1><span className="text-rose-400">♡</span></header>
+        <header className="mb-8 flex items-center justify-between">
+<header className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+  <Link
+    href="/life"
+    className="justify-self-start whitespace-nowrap rounded-full bg-white/70 px-4 py-2 text-sm"
+  >
+    ← Life
+  </Link>
+
+  <h1 className="text-center text-xl font-semibold">
+    Moments
+  </h1>
+
+  <span className="justify-self-end text-xl text-rose-400">
+    ♡
+  </span>
+</header>
+
         <section className="mb-8 rounded-3xl border border-white bg-white/80 p-5 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold">记录这一刻 ✨</h2>
           <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} maxLength={10000} placeholder="今天有什么值得记录的瞬间？" className="w-full resize-none rounded-2xl bg-slate-50 p-4 text-sm outline-none" />
