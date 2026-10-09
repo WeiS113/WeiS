@@ -373,7 +373,6 @@ html.dark .shadow-sm {
     min-width: 0;
   }
 }
-<CodeBlock language="css" editable>
 /* WeiS Planner - mobile task checkbox fix */
 @media (max-width: 767px) {
   .planner-task-checkbox {
@@ -386,4 +385,3 @@ html.dark .shadow-sm {
     aspect-ratio: 1 / 1;
   }
 }
-</CodeBlock>
