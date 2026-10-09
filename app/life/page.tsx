@@ -1,6 +1,7 @@
 
 import Link from "next/link";
 
+
 const sections = [
   {
     title: "Journal",
@@ -17,6 +18,13 @@ const sections = [
     gradient: "from-rose-100 to-orange-100",
   },
   {
+    title: "Daily Share",
+    description: "与朋友分享生活，交流每一个瞬间",
+    icon: "✦",
+    href: "/life/share",
+    gradient: "from-pink-100 to-amber-100",
+  },
+  {
     title: "Calendar",
     description: "按日期回顾生活的点点滴滴",
     icon: "▦",
@@ -24,6 +32,7 @@ const sections = [
     gradient: "from-sky-100 to-indigo-100",
   },
 ];
+
 
 export default function LifePage() {
   return (
@@ -76,7 +85,7 @@ export default function LifePage() {
               key={item.href}
               href={item.href}
               className={`group rounded-[28px] border border-white/80 bg-white/70 p-6 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:bg-white/90 ${
-                item.title === "Calendar" ? "sm:col-span-2" : ""
+                ""
               }`}
             >
               <div
