@@ -943,18 +943,27 @@ export default function CalendarPage() {
                                     task
                                   ) => (
                                     <span
-                                      key={
-                                        task.id
-                                      }
-                                      className={`rounded-full ${dotClass(
+                                      key={task.id}
+                                      className={`relative inline-block rounded-full ${dotClass(
                                         task.priority
-                                      )}`}
+                                      )} ${
+                                        task.completed
+                                          ? "opacity-35"
+                                          : ""
+                                      }`}
                                       title={`${task.title} · ${priorityLabel(
                                         task.priority
                                       )}${tagsText(
                                         task
-                                      )}`}
-                                    />
+                                      )}${task.completed ? " · 已完成" : ""}`}
+                                    >
+                                      {task.completed && (
+                                        <span
+                                          aria-hidden="true"
+                                          className="absolute left-1/2 top-1/2 h-[2px] w-[140%] -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-full bg-gray-500"
+                                        />
+                                      )}
+                                    </span>
                                   )
                                 )}
 
