@@ -19,13 +19,15 @@ type NavItem = {
   icon: "today" | "calendar" | "tasks" | "projects" | "settings";
 };
 
+
 const defaultNavItems: NavItem[] = [
-  { name: "今天", href: "/", icon: "today" },
-  { name: "日历", href: "/calendar", icon: "calendar" },
-  { name: "待办", href: "/tasks", icon: "tasks" },
-  { name: "项目", href: "/projects", icon: "projects" },
-  { name: "设置", href: "/settings", icon: "settings" },
+  { name: "今天", href: "/planner", icon: "today" },
+  { name: "日历", href: "/planner/calendar", icon: "calendar" },
+  { name: "待办", href: "/planner/tasks", icon: "tasks" },
+  { name: "项目", href: "/planner/projects", icon: "projects" },
+  { name: "设置", href: "/planner/settings", icon: "settings" },
 ];
+
 
 const STORAGE_KEY = "WeiS-planner-sidebar-order";
 
@@ -232,9 +234,20 @@ export default function Sidebar() {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-white p-6 md:flex">
-        <h1 className="mb-8 text-2xl font-bold">
-          WeiS Planner
-        </h1>
+        <div className="mb-8">
+          <Link
+            href="/"
+            className="mb-4 inline-flex items-center gap-2 text-sm text-gray-400 transition hover:text-gray-800"
+          >
+            <span>←</span>
+            <span>返回 WeiS</span>
+          </Link>
+        
+          <h1 className="text-2xl font-bold">
+            WeiS Planner
+          </h1>
+        </div>
+
 
         <nav className="space-y-2">
           {navItems.map((item) => {
@@ -333,6 +346,23 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
+      
+      {/* Mobile module header */}
+      <header className="flex items-center justify-between border-b border-white/60 bg-white/75 px-5 py-3 backdrop-blur-xl md:hidden">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-600"
+        >
+          <span>‹</span>
+          <span>WeiS</span>
+        </Link>
+      
+        <span className="text-sm font-semibold text-gray-900">
+          Planner
+        </span>
+      
+        <div className="w-12" />
+      </header>
 
       {/* iOS-style mobile tab bar */}
       <nav
