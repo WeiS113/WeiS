@@ -1,6 +1,7 @@
 
 import Link from "next/link";
 
+
 const sections = [
   {
     title: "Journal",
@@ -17,6 +18,13 @@ const sections = [
     gradient: "from-rose-100 to-orange-100",
   },
   {
+    title: "Daily Share",
+    description: "与朋友分享生活，交流每一个瞬间",
+    icon: "✦",
+    href: "/life/share",
+    gradient: "from-pink-100 to-amber-100",
+  },
+  {
     title: "Calendar",
     description: "按日期回顾生活的点点滴滴",
     icon: "▦",
@@ -24,6 +32,7 @@ const sections = [
     gradient: "from-sky-100 to-indigo-100",
   },
 ];
+
 
 export default function LifePage() {
   return (
