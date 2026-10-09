@@ -85,7 +85,7 @@ export default function LifePage() {
               key={item.href}
               href={item.href}
               className={`group rounded-[28px] border border-white/80 bg-white/70 p-6 shadow-sm backdrop-blur-xl transition hover:-translate-y-1 hover:bg-white/90 ${
-                item.title === "Calendar" ? "sm:col-span-2" : ""
+                ""
               }`}
             >
               <div
