@@ -527,17 +527,7 @@ export default function DailySharePage() {
                     </div>
 
 
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium">
-                        {author?.display_name ??
-                          "WeiS User"}
-                      </p>
-                      <time className="text-xs text-slate-400">
-                        {new Date(
-                          share.created_at
-                        ).toLocaleString("zh-CN")}
-                      </time>
-                    </div>
+                   
 
                     {share.user_id === userId && (
                       <button
