@@ -497,7 +497,11 @@ export default function DailySharePage() {
                   className="rounded-3xl border border-white bg-white/85 p-5 shadow-sm"
                 >
                   <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose-100 text-rose-400">
+                    
+                    <Link
+                      href={`/life/share/users/${share.user_id}`}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-rose-100 text-rose-400"
+                    >
                       {avatar ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
@@ -508,7 +512,20 @@ export default function DailySharePage() {
                       ) : (
                         "♡"
                       )}
+                    </Link>
+                    
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/life/share/users/${share.user_id}`}
+                        className="font-medium hover:text-rose-500"
+                      >
+                        {author?.display_name ?? "WeiS User"}
+                      </Link>
+                      <time className="block text-xs text-slate-400">
+                        {new Date(share.created_at).toLocaleString("zh-CN")}
+                      </time>
                     </div>
+
 
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">
