@@ -819,7 +819,7 @@ export default function Home() {
                     task
                   )
                 }
-                className="mt-1"
+                className="planner-native-checkbox mt-1"
               />
 
               <div className="min-w-0">
