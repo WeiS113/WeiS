@@ -94,7 +94,24 @@ export default function JournalPage() {
   return (
     <main className="min-h-screen bg-[#f7f5fa] px-4 py-8 text-slate-800">
       <div className="mx-auto max-w-3xl">
-        <header className="mb-8 flex items-center justify-between"><Link href="/life" className="rounded-full bg-white/80 px-4 py-2 text-sm">← Life</Link><h1 className="text-lg font-semibold">Journal</h1><span className="text-xl text-violet-400">✎</span></header>
+        <header className="mb-8 flex items-center justify-between">
+<header className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+  <Link
+    href="/life"
+    className="justify-self-start whitespace-nowrap rounded-full bg-white/80 px-4 py-2 text-sm"
+  >
+    ← Life
+  </Link>
+
+  <h1 className="text-center text-lg font-semibold">
+    Journal
+  </h1>
+
+  <span className="justify-self-end text-xl text-violet-400">
+    ✎
+  </span>
+</header>
+
         <section className="mb-8 rounded-[30px] border border-white bg-white/80 p-5 shadow-sm sm:p-8">
           <p className="mb-2 text-xs tracking-[0.25em] text-violet-400">DEAR DIARY</p>
           <h2 className="mb-6 text-2xl font-semibold">{editingId ? "编辑这篇日记" : "写下今天的故事"}</h2>
