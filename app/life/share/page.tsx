@@ -1,6 +1,6 @@
 
 "use client";
-
+import VerifiedBadge from "../../../components/VerifiedBadge";
 import Link from "next/link";
 import {
   ChangeEvent,
@@ -20,12 +20,15 @@ type Share = {
   created_at: string;
 };
 
+
 type Profile = {
   user_id: string;
   display_name: string;
   bio: string;
   avatar_path: string | null;
+  is_verified: boolean;
 };
+
 
 const IMAGE_BUCKET = "daily-share-images";
 const AVATAR_BUCKET = "share-avatars";
@@ -99,7 +102,7 @@ export default function DailySharePage() {
         await supabase
           .from("share_profiles")
           .select(
-            "user_id,display_name,bio,avatar_path"
+             "user_id,display_name,bio,avatar_path,is_verified"
           )
           .in("user_id", authorIds);
 
@@ -515,12 +518,20 @@ export default function DailySharePage() {
                     </Link>
                     
                     <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/life/share/users/${share.user_id}`}
-                        className="font-medium hover:text-rose-500"
-                      >
-                        {author?.display_name ?? "WeiS User"}
-                      </Link>
+                      
+<div className="flex items-center gap-1.5">
+  <Link
+    href={`/life/share/users/${share.user_id}`}
+    className="font-medium hover:text-rose-500"
+  >
+    {author?.display_name ?? "WeiS User"}
+  </Link>
+
+  {author?.is_verified === true && (
+    <VerifiedBadge size={18} />
+  )}
+</div>
+
                       <time className="block text-xs text-slate-400">
                         {new Date(share.created_at).toLocaleString("zh-CN")}
                       </time>
