@@ -101,6 +101,7 @@ export async function GET(request:NextRequest){
  const second=feeds[1].status==="fulfilled"?feeds[1].value:[];
  const proxy=feeds[2].status==="fulfilled"?feeds[2].value:[];
  const points=first.length>=second.length&&first.length>=proxy.length?first:second.length>=proxy.length?second:proxy;
- const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"请求或解析失败":first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"请求或解析失败":second.length>=2?"有效":"未返回当天有效分时点",count:second.length},{provider:"债基 ETF 分时代理",status:feeds[2].status==="rejected"?"行情获取失败":proxy.length>=2?"有效":"无对应代理",count:proxy.length}];
+ const reason=(i:number)=>{const r=feeds[i];if(r.status!=="rejected")return "";const e=r.reason;const message=e instanceof Error?e.message:String(e);return message.slice(0,140);};
+ const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"失败："+reason(0):first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"失败："+reason(1):second.length>=2?"有效":"未返回当天有效分时点",count:second.length},{provider:"债基 ETF 分时代理",status:feeds[2].status==="rejected"?"失败："+reason(2):proxy.length>=2?"有效":"无对应代理",count:proxy.length}];
  return NextResponse.json({code,points,source:points.length?(points===proxy?"债基 ETF 分时基准代理（非基金实际净值）":first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"基金平台未提供可验证的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
 }
