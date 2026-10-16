@@ -167,6 +167,52 @@ export default function FinancePage() {
     } finally { setSyncBusy(false); }
   }
 
+  function exportBackup() {
+    const payload = { version: 1, exportedAt: new Date().toISOString(), watchlist: items, holdings };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = "weis-finance-backup.json";
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    URL.revokeObjectURL(url);
+    setSyncMessage("已生成当前浏览器的数据备份文件，请妥善保管");
+  }
+
+  async function importBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 512_000) { setSyncMessage("文件太大，拒绝导入"); return; }
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== "object") throw new Error("文件结构错误");
+      const backup = parsed as Record<string, unknown>;
+      if (backup.version !== 1 || !Array.isArray(backup.watchlist) || !backup.holdings || typeof backup.holdings !== "object" || Array.isArray(backup.holdings)) throw new Error("不支持此备份文件格式");
+      if (backup.watchlist.length > 300) throw new Error("自选数量超出限制");
+      const restored: Saved[] = [];
+      const seen = new Set<string>();
+      for (const raw of backup.watchlist) {
+        if (!raw || typeof raw !== "object") throw new Error("无效的自选记录");
+        const entry = raw as Record<string, unknown>;
+        if ((entry.kind !== "stock" && entry.kind !== "fund") || typeof entry.code !== "string" || !/^\\d{6}$/.test(entry.code)) throw new Error("无效的证券代码");
+        const key = entry.kind + entry.code;
+        if (!seen.has(key)) { restored.push({ code: entry.code, kind: entry.kind }); seen.add(key); }
+      }
+      const nextHoldings: Record<string, Holding> = {};
+      for (const [key, value] of Object.entries(backup.holdings as Record<string, unknown>)) {
+        if (!/^(stock|fund)\\d{6}$/.test(key) || !value || typeof value !== "object") throw new Error("无效的持仓记录");
+        const data = value as Record<string, unknown>;
+        if (typeof data.quantity !== "number" || typeof data.cost !== "number" || !Number.isFinite(data.quantity) || !Number.isFinite(data.cost) || data.quantity < 0 || data.cost < 0) throw new Error("持仓数量或成本无效");
+        if (seen.has(key)) nextHoldings[key] = { quantity: data.quantity, cost: data.cost };
+      }
+      if (!window.confirm("导入将覆盖本浏览器当前的自选及持仓数据，是否继续？")) return;
+      setItems(restored); setHoldings(nextHoldings);
+      localStorage.setItem(KEY, JSON.stringify(restored));
+      localStorage.setItem(HOLDINGS_KEY, JSON.stringify(nextHoldings));
+      setSyncMessage("本地备份已恢复");
+    } catch (error) { setSyncMessage(error instanceof Error ? error.message : "导入失败"); }
+  }
+
   function updateItems(next: Saved[]) { setItems(next); localStorage.setItem(KEY, JSON.stringify(next)); }
   function addResult(result: Saved) {
     if (items.some(x => x.code === result.code && x.kind === result.kind)) { setMessage("已在自选列表中"); return; }
@@ -193,6 +239,8 @@ export default function FinancePage() {
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={syncBusy} onClick={() => void syncToCloud()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">上传到云端</button>
               <button type="button" disabled={syncBusy} onClick={() => void restoreFromCloud()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm disabled:opacity-50">从云端恢复</button>
+              <button type="button" onClick={exportBackup} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导出本地备份</button>
+              <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导入本地备份<input type="file" accept="application/json,.json" onChange={event => void importBackup(event)} className="hidden" /></label>
             </div>
           </div>
           {syncMessage && <p role="status" className="mt-3 text-xs text-slate-600">{syncMessage}</p>}
