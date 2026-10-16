@@ -31,6 +31,7 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [lastRefresh, setLastRefresh] = useState("");
+  const [estimateRefreshTick, setEstimateRefreshTick] = useState(0);
   const [matches, setMatches] = useState<SearchResult[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -177,7 +178,7 @@ export default function FinancePage() {
     void fetchEstimates();
     const timer = setInterval(() => { if (document.visibilityState === "visible") void fetchEstimates(); }, 60000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [items]);
+  }, [items, estimateRefreshTick]);
 
   useEffect(() => {
     const q = input.trim();
@@ -343,7 +344,7 @@ export default function FinancePage() {
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">← 返回 WeiS</Link>
         <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">基金盘中估值 · 实时动态 · 预估收益</p></div>
-          <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
+          <button type="button" onClick={() => {void refresh();setEstimateRefreshTick(x=>x+1);}} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
         </div>
         <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-2">
@@ -410,7 +411,7 @@ export default function FinancePage() {
         </section>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button type="button" onClick={()=>setView("watchlist")} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-rose-700">＋ 添加基金</button>
-          <button type="button" onClick={()=>void refresh()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-50">刷新净值</button>
+          <button type="button" onClick={()=>{void refresh();setEstimateRefreshTick(x=>x+1);}} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-50">刷新盘中估值</button>
           <span className="text-xs text-slate-500">估值约每60秒更新 · 非实时成交价</span>
         </div>
         {heldPositions.length > 0 && <div className="mt-7">        <section className="mt-6 grid gap-3 sm:grid-cols-3">
