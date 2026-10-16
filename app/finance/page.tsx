@@ -12,6 +12,7 @@ type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
 type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
 type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string };
+type EstimatePoint = { at: number; change: number };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const KEY = "weis-finance-watchlist";
 const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kind: "stock" }, { code: "110022", kind: "fund" }];
@@ -20,6 +21,7 @@ export default function FinancePage() {
   const [items, setItems] = useState<Saved[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
+  const [estimateSeries, setEstimateSeries] = useState<Record<string, EstimatePoint[]>>({});
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
   const [holdingReady, setHoldingReady] = useState(false);
   const [input, setInput] = useState("");
@@ -34,6 +36,20 @@ export default function FinancePage() {
   const [chartCode, setChartCode] = useState<string | null>(null);
   const [view, setView] = useState<"holdings" | "watchlist" | "settings">("holdings");
   const refreshId = useRef(0);
+
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("weis-finance-estimate-series-v1") || "{}") as Record<string, EstimatePoint[]>;
+      const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+      const data: Record<string, EstimatePoint[]> = {};
+      for (const [key, series] of Object.entries(parsed)) {
+        if (!Array.isArray(series)) continue;
+        const cleaned = series.filter(x => typeof x.at === "number" && typeof x.change === "number" && Number.isFinite(x.change) && new Date(x.at).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }) === today).slice(-120);
+        if (cleaned.length) data[key] = cleaned;
+      }
+      setEstimateSeries(data);
+    } catch { /* ignore invalid local chart cache */ }
+  }, []);
 
   useEffect(() => {
     try { const saved = localStorage.getItem(KEY); setItems(saved ? JSON.parse(saved) : START); }
@@ -119,7 +135,24 @@ export default function FinancePage() {
         const response = await fetch("/api/finance/estimate?codes=" + funds.map(x => x.code).join(","), { cache:"no-store" });
         if (!response.ok) throw new Error("estimate service unavailable");
         const data = await response.json() as { estimates: (Estimate & {code:string})[] };
-        if (!cancelled) setEstimates(Object.fromEntries((Array.isArray(data.estimates) ? data.estimates : []).map(x => [x.code,x])));
+        if (!cancelled) {
+          const values = Array.isArray(data.estimates) ? data.estimates : [];
+          setEstimates(Object.fromEntries(values.map(x => [x.code,x])));
+          setEstimateSeries(previous => {
+            const now = Date.now();
+            const today = new Date(now).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
+            const next = { ...previous };
+            for (const x of values) {
+              if (x.change === null || !Number.isFinite(x.change) || !x.time) continue;
+              const prior = (next[x.code] || []).filter(p => new Date(p.at).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"}) === today);
+              const latest = prior[prior.length-1];
+              if (latest && now-latest.at < 45000) continue;
+              next[x.code] = [...prior, {at:now,change:x.change}].slice(-120);
+            }
+            try { localStorage.setItem("weis-finance-estimate-series-v1", JSON.stringify(next)); } catch { /* storage disabled */ }
+            return next;
+          });
+        }
       } catch {
         if (!cancelled) setEstimates(Object.fromEntries(funds.map(x=>[x.code,{estimatedNav:null,change:null,time:null,source:"估算接口暂不可用"}])));
       }
@@ -317,6 +350,7 @@ export default function FinancePage() {
           </div>
           <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"暂无盘中估算"}</p>
           <p className="mt-1 text-xs text-slate-400">{estimated.length?"估算当日变化金额（不含手续费、申赎与分红）":"当前数据源未返回可计算的基金盘中估算，不能以已公布净值冒充"}</p>
+          <p className="mt-2 text-xs text-slate-400">盘中走势从你打开本页面后开始记录，历史数据不会被虚构或回填。</p>
           <div className="mt-4 divide-y divide-slate-100">
             {items.filter(x=>x.kind==="fund").map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
@@ -324,6 +358,15 @@ export default function FinancePage() {
               const delta=hasEstimate?h!.quantity*(e!.estimatedNav!-q!.price!):null;
               return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · 估算时间 {e?.time||"未提供"}</p></div>
+                {(() => {
+                  const points = estimateSeries[item.code] || [];
+                  if (points.length < 2) return <p className="w-24 text-center text-[11px] text-slate-400">等待走势采样</p>;
+                  const values = points.map(p => p.change);
+                  const lo = Math.min(...values), hi = Math.max(...values);
+                  const range = hi-lo || 0.01;
+                  const path = values.map((v,i) => (i===0?"M":"L") + (i/(values.length-1)*100).toFixed(1) + "," + (38-(v-lo)/range*34).toFixed(1)).join(" ");
+                  return <svg viewBox="0 0 100 42" role="img" aria-label={item.code+" 今日估算涨跌动态，"+points.length+"个采样点"} className="h-11 w-24"><path d={path} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
+                })()}
                 <div className="text-right"><p className={`text-sm font-semibold tabular-nums ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"暂无法计算":(delta>=0?"+":"")+money(delta)}</p><p className="mt-1 text-xs text-slate-500">{e?.change==null?"估算涨跌暂无":(e.change>=0?"+":"")+e.change.toFixed(2)+"%"} · {e?.estimatedNav==null?"估算净值暂无":e.estimatedNav.toFixed(4)}</p></div>
               </div>;
             })}
