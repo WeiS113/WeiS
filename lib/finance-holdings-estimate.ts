@@ -51,7 +51,7 @@ export async function estimateFromHoldings(code:string, report?: (reason:string)
   const nav=navValue!==null&&navValue>0?navValue:await trendNav(code);
   if(nav===null||nav<=0)return fail("移动端净值与公开历史净值双源均不可用");
   const typeText=String(n?.Datas?.FTYPE??n?.Datas?.FUNDTYPE??"");
-  if(/债券|货币|QDII|海外|商品|黄金|FOF|养老/.test(typeText))return fail("基金类型不适用 A 股持仓估算："+typeText);
+  if(/债券|货币|QDII|海外|商品|黄金|FOF|养老/.test(typeText))return fail("已识别"+typeText+"；须选用对应资产估算，不能用 A 股持仓模型伪算完整收益");
   const payload=h?.Datas;
   const stocks=[payload?.fundStocks,payload?.FundStocks,payload?.fundStockList,payload?.stockList,payload?.List,Array.isArray(payload)?payload:null].find(Array.isArray)??[];
   let valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??x.STOCKCODE??x.CODE??""),name:String(x.GPJC??x.STOCKNAME??x.NAME??""),weight:num(x.JZBL??x.ZJZBL??x.WEIGHT)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
