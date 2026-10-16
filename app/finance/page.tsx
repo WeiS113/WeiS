@@ -6,10 +6,11 @@ type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
 type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number;stocks?:{code:string;name:string;weight:number;change:number}[]};
 type Search={code:string;name:string;kind:"fund"|"stock"};
-type CurvePoint={at:number;change:number};
+type CurvePoint={at:number;change:number;nav:number};
 const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
+const CURVES_KEY="weis-finance-intraday-curves-v2";
 const INITIAL:string[]=[];
 const money=(n:number)=>"¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const signed=(n:number)=> (n>0?"+":"")+n.toFixed(2)+"%";
@@ -49,10 +50,12 @@ export default function FinancePage(){
    const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
   }catch{setCodes(INITIAL);}
+  try{const saved=JSON.parse(localStorage.getItem(CURVES_KEY)||"{}") as Record<string,CurvePoint[]>;const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});const restored:Record<string,CurvePoint[]>={};for(const [code,arr] of Object.entries(saved)){if(!/^\d{6}$/.test(code)||!Array.isArray(arr))continue;restored[code]=arr.filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.change)&&Number.isFinite(p.nav)&&p.nav>0&&new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===day).slice(-360);}setCurves(restored);}catch{}
   setReady(true);
  },[]);
  useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));},[ready,codes,names]);
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
+ useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
  const refresh=useCallback(async()=>{
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
@@ -65,7 +68,7 @@ export default function FinancePage(){
    for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
    setQuotes(prev=>({...prev,...newQuotes}));
    const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
-   setCurves(prev=>{const next={...prev};const now=Date.now();for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!isFresh(e.time))continue;const prior=(prev[e.code]||[]).filter(p=>now-p.at<6*3600000);if(prior.length&&now-prior[prior.length-1].at<30000)continue;next[e.code]=[...prior,{at:now,change:e.change}].slice(-180);}return next;});
+   setCurves(prev=>{const next={...prev};const now=Date.now();const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!valid(e.estimatedNav)||!isFresh(e.time))continue;const prior=(prev[e.code]||[]).filter(p=>new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===today);if(prior.length&&now-prior[prior.length-1].at<30000){next[e.code]=prior;continue;}next[e.code]=[...prior,{at:now,change:e.change,nav:e.estimatedNav}].slice(-360);}return next;});
    setEstimates(prev=>{
     const next={...prev};
     for(const e of obtained)next[e.code]=e;
@@ -160,7 +163,8 @@ export default function FinancePage(){
       </div>
       <p className="mt-4 text-xs text-slate-400">{x.live?"盘中参考估值":"已公布净值或暂不可用"} · {x.time||"暂无时间"}</p>
       <p className="mt-1 text-[11px] text-slate-400">{x.source}</p>
-      {x.curve.length>=2?(()=>{const values=x.curve.map(p=>p.change);const min=Math.min(-0.1,...values),max=Math.max(0.1,...values),range=max-min||1;const pts=x.curve.map((p,i)=>(10+i/Math.max(1,x.curve.length-1)*680).toFixed(1)+","+(104-(p.change-min)/range*88).toFixed(1)).join(" ");return <svg viewBox="0 0 700 122" role="img" aria-label={x.name+"盘中估算走势"} className="mt-3 w-full"><line x1="10" x2="690" y1={104-(0-min)/range*88} y2={104-(0-min)/range*88} stroke="#cbd5e1" strokeDasharray="5 5"/><polyline points={pts} stroke={x.change!==null&&x.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" fill="none" strokeLinejoin="round"/></svg>})():<p className="mt-3 text-xs text-slate-400">盘中走势图需积累至少两次有效行情。</p>}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">当日实时估值变化</p><p className="mt-1 text-[11px] text-slate-400">每60秒采样 · 当天缓存 · 非官方净值</p></div><span className="text-xs font-semibold tabular-nums">{x.nav===null?"—":x.nav.toFixed(4)}</span></div>
+      {x.curve.length>=2?(()=>{const values=x.curve.map(p=>p.nav);const min=Math.min(...values),max=Math.max(...values),range=Math.max(max-min,0.0001);const pts=x.curve.map((p,i)=>(12+i/Math.max(1,x.curve.length-1)*316).toFixed(1)+","+(100-(p.nav-min)/range*72).toFixed(1)).join(" ");const first=x.curve[0],last=x.curve[x.curve.length-1];return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"当日实时估值变化曲线"} className="mt-3 w-full"><line x1="12" x2="328" y1="100" y2="100" stroke="#e2e8f0"/><polyline points={pts} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/><circle cx="328" cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/></svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>{new Date(first.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>{new Date(last.at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</span></div></>})():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">{x.live?"正在采集有效行情，至少两次采样后绘图。":"今日暂无有效估值，不能绘制真实变化曲线。"}</p>}</div>
       {x.stocks.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer text-slate-600">披露重仓股 · 覆盖 {x.coverage??"—"}%</summary><div className="mt-2 space-y-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between gap-2"><span>{s.name} {s.code}</span><span>{s.weight.toFixed(2)}% · {signed(s.change)}</span></div>)}</div></details>}
       {issues[x.code]&&<details className="mt-3 text-xs text-amber-700"><summary className="cursor-pointer">盘中估算暂不可用 · 查看原因</summary><p className="mt-2">{issues[x.code]}</p></details>}
       <div className="mt-4 flex items-center gap-2 border-t border-slate-200 pt-3"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-600">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">历史净值</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto text-xs text-slate-400">移除</button></div>
