@@ -18,7 +18,7 @@ export default function Research(){
   setCodes(next);setBusy(true);setChecked(true);setMessage("");
   const result=await Promise.all(next.map(async code=>{
    try{
-    const [history,quote]=await Promise.allSettled<unknown>([
+    const [history,quote]=await Promise.allSettled([
       fetch("/api/finance/fund-history?code="+code,{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("历史净值暂不可用");return r.json()}),
       fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"}).then(r=>r.ok?r.json():null)
     ]);
