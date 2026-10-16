@@ -309,6 +309,25 @@ export default function FinancePage() {
         </section>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
+        <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="text-lg font-semibold">我的基金 · 盘中估算涨跌</h2><p className="mt-1 text-xs text-slate-500">非官方净值，仅统计能获取估算且已录入份额的基金</p></div>
+            <span className="text-xs text-slate-500">覆盖 {estimated.length}/{covered.length} 只</span>
+          </div>
+          <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"暂无盘中估算"}</p>
+          <p className="mt-1 text-xs text-slate-400">{estimated.length?"估算当日变化金额（不含手续费、申赎与分红）":"当前数据源未返回可计算的基金盘中估算，不能以已公布净值冒充"}</p>
+          <div className="mt-4 divide-y divide-slate-100">
+            {items.filter(x=>x.kind==="fund").map(item=>{
+              const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
+              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&h?.quantity>0;
+              const delta=hasEstimate?h.quantity*(e.estimatedNav!-q!.price!):null;
+              return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · 估算时间 {e?.time||"未提供"}</p></div>
+                <div className="text-right"><p className={`text-sm font-semibold tabular-nums ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"暂无法计算":(delta>=0?"+":"")+money(delta)}</p><p className="mt-1 text-xs text-slate-500">{e?.change==null?"估算涨跌暂无":(e.change>=0?"+":"")+e.change.toFixed(2)+"%"} · {e?.estimatedNav==null?"估算净值暂无":e.estimatedNav.toFixed(4)}</p></div>
+              </div>;
+            })}
+          </div>
+        </section>
         <section className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-xs text-slate-500">有估算数据的基金 · 预估变化</p>
