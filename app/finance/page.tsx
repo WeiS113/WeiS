@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
+import {supabase} from "../../lib/supabase";
 import VoiceFundTrade,{type VoiceTrade} from "../../components/VoiceFundTrade";
 type Holding={quantity:number;cost:number};
 type Entry={code:string;kind:"fund"|"stock"};
@@ -41,6 +42,10 @@ export default function FinancePage(){
  const [message,setMessage]=useState("");
  const [sort,setSort]=useState<"custom"|"change"|"profit">("custom");
  const refreshing=useRef(false);
+ const [cloudUser,setCloudUser]=useState<string|null>(null);
+ const [cloudStatus,setCloudStatus]=useState("正在检查同步状态…");
+ const [cloudReady,setCloudReady]=useState(false);
+ const cloudBusy=useRef(false);
  useEffect(()=>{
   try{
    const old=JSON.parse(localStorage.getItem(WATCH_KEY)||"[]") as Entry[];
@@ -58,6 +63,51 @@ export default function FinancePage(){
  useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));},[ready,codes,names]);
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
  useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
+ useEffect(()=>{
+  let cancelled=false;
+  void supabase.auth.getUser().then(async ({data,error})=>{
+    if(cancelled)return;
+    const uid=data.user?.id;
+    if(error||!uid){setCloudStatus("未登录：当前数据仅在本设备保存");return;}
+    setCloudUser(uid);
+    const {data:remote,error:readError}=await supabase.from("finance_portfolios").select("codes,names,holdings,updated_at").eq("user_id",uid).maybeSingle();
+    if(cancelled)return;
+    if(readError){setCloudStatus("云端表未就绪或读取失败："+readError.message);return;}
+    if(remote){setCloudStatus("发现云端持仓。请选择“载入云端”或“上传本机”，避免覆盖数据。");}
+    else{setCloudStatus("当前云端暂无持仓，请点击“上传本机”开始跨设备同步。");}
+  }).catch(()=>{if(!cancelled)setCloudStatus("无法连接账户数据库，当前仅保存在本机。");});
+  return()=>{cancelled=true;};
+ },[]);
+ async function uploadCloud(){
+  if(!cloudUser||cloudBusy.current)return;
+  if(!window.confirm("把此设备的基金列表、持有份额和成本上传到你的账户云端？云端现有持仓将被覆盖。"))return;
+  cloudBusy.current=true;setCloudStatus("正在上传本机持仓…");
+  const {error}=await supabase.from("finance_portfolios").upsert({user_id:cloudUser,codes,names,holdings,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+  cloudBusy.current=false;
+  if(error){setCloudStatus("上传失败："+error.message);return;}
+  setCloudReady(true);setCloudStatus("已开启本账户同步；后续修改将自动保存云端。");
+ }
+ async function downloadCloud(){
+  if(!cloudUser||cloudBusy.current)return;
+  cloudBusy.current=true;
+  const {data,error}=await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id",cloudUser).maybeSingle();
+  cloudBusy.current=false;
+  if(error||!data){setCloudStatus("读取失败或云端尚无数据："+(error?.message??"无数据"));return;}
+  if(!window.confirm("载入云端持仓会替换当前设备上的基金列表、份额与成本，继续吗？"))return;
+  const savedCodes=Array.isArray(data.codes)?data.codes.filter((x:unknown)=>typeof x==="string"&&/^\\d{6}$/.test(x)):[];
+  setCodes(savedCodes);
+  setNames(data.names&&typeof data.names==="object"&&!Array.isArray(data.names)?data.names as Record<string,string>:{});
+  setHoldings(data.holdings&&typeof data.holdings==="object"&&!Array.isArray(data.holdings)?data.holdings as Record<string,Holding>:{});
+  setCloudReady(true);setCloudStatus("已载入云端持仓，后续修改自动同步。");
+ }
+ useEffect(()=>{
+  if(!ready||!cloudReady||!cloudUser)return;
+  const timer=setTimeout(()=>{
+   if(cloudBusy.current)return;
+   void supabase.from("finance_portfolios").upsert({user_id:cloudUser,codes,names,holdings,updated_at:new Date().toISOString()},{onConflict:"user_id"}).then(({error})=>{setCloudStatus(error?"自动同步失败："+error.message:"已同步到云端");});
+  },1200);
+  return()=>clearTimeout(timer);
+ },[ready,cloudReady,cloudUser,codes,names,holdings]);
  const refresh=useCallback(async()=>{
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
@@ -155,6 +205,7 @@ export default function FinancePage(){
  return <main className="min-h-screen bg-[#f6f7fa] text-slate-800">
   <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4"><div><Link href="/" className="text-xs text-slate-400">WeiS /</Link><h1 className="text-xl font-bold">我的基金账户</h1></div><button type="button" disabled={loading} onClick={()=>void refresh()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading?"更新中…":"↻ 刷新行情"}</button></div></header>
   <div className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
+   <section className="mb-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold">跨设备持仓同步</p><p role="status" className="mt-1 text-xs text-slate-500">{cloudStatus}</p></div><div className="flex gap-2"><button type="button" disabled={!cloudUser} onClick={()=>void downloadCloud()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold disabled:opacity-40">载入云端</button><button type="button" disabled={!cloudUser} onClick={()=>void uploadCloud()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">上传本机</button></div></div></section>
    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>每 60 秒刷新 · 最近检查 {updated||"尚未获取"}</span><span>盘中估算不是基金官方净值；数据可能延迟</span></div>
    <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
     <p className="text-xs text-slate-500">今日预估收益 · 已覆盖 {todayHeld.length}/{held.length} 只持仓</p>
