@@ -38,6 +38,29 @@ export async function GET(request: NextRequest) {
           if (value && String(value.FCODE??"")===code) {data=value;break;}
         }catch { /* another domestic endpoint */ }
       }
+      if (!data || !(num(data.DWJZ)!>0)) {
+        // A published historical NAV is enough for portfolio valuation, even when the
+        // domestic mobile detail API is temporarily blocked or omits DWJZ.
+        try {
+          const backup=await fetch("https://fund.eastmoney.com/pingzhongdata/"+code+".js",{
+            headers,signal:AbortSignal.timeout(5500),next:{revalidate:300}
+          });
+          if(backup.ok){
+            const raw=await backup.text();
+            const found=raw.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+            if(found){
+              const rows=JSON.parse(found[1]) as {x?:number;y?:number;equityReturn?:number}[];
+              const last=rows.at(-1);
+              if(last&&num(last.y)!>0&&Number.isFinite(last.x)){
+                const date=new Date(last.x!).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+                const named=raw.match(/(?:var\\s+)?fS_name\\s*=\\s*["']([^"']+)["']/);
+                result={code,name:String(data?.SHORTNAME||named?.[1]||code),kind,price:Number(last.y),change:num(last.equityReturn),time:date,source:"最新公布净值（公开净值历史备用源）"};
+                return NextResponse.json(result,{headers:{"Cache-Control":"no-store"}});
+              }
+            }
+          }
+        }catch{/* Do not fabricate an NAV on source failure. */}
+      }
       if (!data) throw new Error("Fund not found");
       result = { code, name: String(data.SHORTNAME || code), kind, price: num(data.DWJZ) !== null && num(data.DWJZ)! > 0 ? num(data.DWJZ) : null, change: num(data.JZZZL), time: String(data.FSRQ || data.JZRQ || "") || null, source: "最新公布净值" };
     } else {
