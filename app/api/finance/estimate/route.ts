@@ -1,4 +1,5 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
+import { estimateBondProxy } from "../../../../lib/finance-bond-proxy";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number };
@@ -65,6 +66,9 @@ export async function GET(request:NextRequest){
   return {code,result,reason};
  }));
  const proxyByCode=new Map(proxies.map(x=>[x.code,x]));
+ const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0);
+ const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
+ const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
@@ -77,12 +81,14 @@ export async function GET(request:NextRequest){
    output.set(code,{...selected,confidence:agreement.length>=2?"high":"medium",model:"direct",sourceCount:ordered.length,disagreement,diagnostic:ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
    continue;
   }
+  const bond=bondByCode.get(code);
+  if(bond?.value){output.set(code,bond.value);continue;}
   const proxy=proxyByCode.get(code);
   if(proxy?.result){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
   const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别"};
-  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?"已识别债券类基金，但缺少债券／可转债有效盘中行情与持仓权重，不能将股票涨幅当作全基金收益":type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
+  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
  const results=codes.map(code=>output.get(code)!);
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
