@@ -18,16 +18,17 @@ export default function Research(){
   setCodes(next);setBusy(true);setChecked(true);setMessage("");
   const result=await Promise.all(next.map(async code=>{
    try{
-    const [history,quote]=await Promise.allSettled([
+    const [history,quote]=await Promise.allSettled<unknown>([
       fetch("/api/finance/fund-history?code="+code,{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("历史净值暂不可用");return r.json()}),
       fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"}).then(r=>r.ok?r.json():null)
     ]);
     if(history.status!=="fulfilled")throw Error("历史净值暂不可用");
-    const raw=history.value.points;
+    const historyData=history.value as {points?:unknown};
+    const raw=historyData.points;
     if(!Array.isArray(raw))throw Error("无历史数据");
-    const points=raw.filter((p:P)=>/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0).sort((a:P,b:P)=>a.date.localeCompare(b.date));
+    const points=(raw as P[]).filter((p:P)=>/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0).sort((a:P,b:P)=>a.date.localeCompare(b.date));
     if(points.length<2)throw Error("历史记录不足");
-    const meta=quote.status==="fulfilled"?quote.value:null;
+    const meta=quote.status==="fulfilled" ? quote.value as {name?:string}|null : null;
     return {code,name:meta?.name||code,points};
    }catch(e){return {code,name:code,points:[],error:e instanceof Error?e.message:"暂不可用"};}
   }));
