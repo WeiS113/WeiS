@@ -428,10 +428,10 @@ export default function FinancePage() {
               {<button type="button" onClick={() => setChartCode(chartCode === item.kind + item.code ? null : item.kind + item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.kind + item.code ? "收起走势" : "查看走势"}</button>}
               <button aria-label={`移除 ${item.code}`} title="移除自选" onClick={() => updateItems(items.filter(x => !(x.code === item.code && x.kind === item.kind)))} className="ml-2 rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600">✕</button>
               <div className="basis-full grid grid-cols-2 gap-3 pt-2 sm:ml-auto sm:basis-auto sm:w-[310px]"><label className="text-xs text-slate-500">持有份额 / 股数<input aria-label={`${item.code} 持有份额或股数`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.quantity ?? 0} onChange={e => setHolding(item.kind + item.code, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-xs text-slate-500">单位成本（元）<input aria-label={`${item.code} 单位成本`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.cost ?? 0} onChange={e => setHolding(item.kind + item.code, "cost", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label></div>
+              {chartCode === item.kind + item.code && <div className="w-full basis-full border-t border-slate-100 pt-4"><FinanceHistory code={item.code} kind={item.kind} /></div>}
             </div>; })}
           </div>}
         </section>
-        {chartCode && items.some(item => item.kind + item.code === chartCode) && <FinanceHistory code={chartCode.replace(/^(stock|fund)/, "")} kind={chartCode.startsWith("fund") ? "fund" : "stock"} />}
         </>}
         <p className="mt-6 text-xs leading-6 text-slate-400">行情仅供个人参考，不构成投资建议。A股和ETF报价可能延迟；场外基金展示最近公布的官方净值及对应日涨跌，不属于盘中实时估值。第三方接口可能限流或中断，自选和成本数据暂保存在当前浏览器中；当前盈亏未计手续费、分红及税费。</p>
       </div>
