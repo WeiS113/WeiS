@@ -10,7 +10,7 @@ async function trendNav(code:string):Promise<number|null>{
   const res=await fetch(url,{headers:domesticHeaders,signal:AbortSignal.timeout(5500),next:{revalidate:300}});
   if(!res.ok)return null;
   const body=await res.text();
-  const fragment=body.match(/(?:var\\s+)?Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+  const fragment=body.match(/(?:var\s+)?Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
   if(!fragment)return null;
   const points=JSON.parse(fragment[1]) as {x?:number;y?:number}[];
   if(!Array.isArray(points)||!points.length)return null;
@@ -43,10 +43,10 @@ export async function estimateFromHoldings(code:string, report?: (reason:string)
   const params="?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0";
   const [holdRes,navRes]=await Promise.all([
    fetch(base+"FundMNInverstPosition"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:600}}).catch(()=>null),
-   fetch(base+"FundMNDetailInformation"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:60}})
+   fetch(base+"FundMNDetailInformation"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:60}}).catch(()=>null)
   ]);
   // Fund NAV is independently available in the published net-worth trend.
-  const h=holdRes?.ok?await holdRes.json().catch(()=>({})): {},n=navRes.ok?await navRes.json().catch(()=>({})):{};
+  const h=holdRes?.ok?await holdRes.json().catch(()=>({})): {},n=navRes?.ok?await navRes.json().catch(()=>({})):{};
   const navValue=num(n?.Datas?.DWJZ);
   const nav=navValue!==null&&navValue>0?navValue:await trendNav(code);
   if(nav===null||nav<=0)return fail("移动端净值与公开历史净值双源均不可用");
