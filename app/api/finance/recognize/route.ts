@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     openai: { key: process.env.OPENAI_API_KEY, endpoint: "https://api.openai.com/v1/chat/completions", model: "gpt-4.1-mini" },
     qwen: { key: process.env.DASHSCOPE_API_KEY, endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen3-vl-plus" },
     doubao: { key: process.env.ARK_API_KEY, endpoint: "https://ark.cn-beijing.volces.com/api/v3/chat/completions", model: "doubao-seed-2-0-lite-260215" },
-    kimi: { key: process.env.MOONSHOT_API_KEY, endpoint: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2.5" }
+    kimi: { key: process.env.MOONSHOT_API_KEY, endpoint: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2.6" }
   };
   const config = configs[provider];
   if (!config?.key) return NextResponse.json({ error: "图片识别尚未配置，请设置 FINANCE_OCR_PROVIDER 和相应服务端 API Key" }, { status: 503 });
@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
     if (!response.ok) return NextResponse.json({ error: "图像识别服务暂不可用" }, { status: 502 });
     const body = await response.json();
     const raw = body?.choices?.[0]?.message?.content;
-    const parsed = JSON.parse(typeof raw === "string" ? raw : "{}");
+    const cleaned = typeof raw === "string" ? raw.trim().replace(/^```(?:json)?\\s*/i, "").replace(/\\s*```$/, "") : "{}";
+    const parsed = JSON.parse(cleaned);
     if (!Array.isArray(parsed.positions)) throw new Error("Unexpected recognition response");
     const seen = new Set<string>();
     const positions: Candidate[] = [];
