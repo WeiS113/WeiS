@@ -1,7 +1,7 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-type Estimate = { code:string; estimatedNav:number|null; change:number|null; time:string|null; source:string };
+type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string };
 const numeric=(v:unknown)=>v==null||v===""||v==="-"?null:Number.isFinite(Number(v))?Number(v):null;
 function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
@@ -23,7 +23,7 @@ async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
   const datePart=time?.replaceAll("/","-").match(/^20\d{2}-\d{2}-\d{2}/)?.[0];
   const source=datePart&&datePart!==day?"天天基金历史时点估算（非今日实时）":"天天基金盘中估算（非官方净值）";
   const isOld=Boolean(datePart&&datePart!==day);
-  result.set(code,{code,estimatedNav:!isOld&&n!==null&&n>0&&n<10000?n:null,change:!isOld&&percent!==null&&Math.abs(percent)<=100?percent:null,time,source});
+  result.set(code,{code,name:typeof x.SHORTNAME==="string"?x.SHORTNAME:undefined,estimatedNav:!isOld&&n!==null&&n>0&&n<10000?n:null,change:!isOld&&percent!==null&&Math.abs(percent)<=100?percent:null,time,source});
  }
  return result;
 }
