@@ -119,7 +119,14 @@ export default function FinancePage(){
   let active=true;
   const pull=async()=>{
    const results=await Promise.all(codes.slice(0,30).map(async code=>{
-    try{const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
+    try{
+     const start=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})+"T00:00:00+08:00";
+     const {data:stored,error:storeError}=await supabase.from("finance_intraday_points").select("at,nav,change_percent,source,model").eq("code",code).gte("at",new Date(start).toISOString()).order("at",{ascending:true}).limit(400);
+     if(!storeError&&stored&&stored.length>=2){
+      const rows=stored.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
+      if(rows.length>=2)return {code,points:rows,detail:"Cloudflare 定时采集 · Supabase 已存 "+rows.length+" 点",source:"云端历史估值（"+String(stored.at(-1)?.source||"参考估算")+"）"};
+     }
+     const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
      if(!r.ok)return {code,points:[] as CurvePoint[],detail:"分时服务请求失败",source:""};
      const d=await r.json();
      return {code,points:Array.isArray(d.points)?(d.points as CurvePoint[]):[],detail:Array.isArray(d.details)?d.details.map((x:{provider:string;status:string;count:number})=>x.provider+"："+x.status+"（"+x.count+" 点）").join("；"):"无平台诊断信息",source:typeof d.source==="string"?d.source:""};
