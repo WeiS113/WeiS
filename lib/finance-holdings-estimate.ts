@@ -6,7 +6,7 @@ const domesticHeaders={"User-Agent":"Mozilla/5.0","Referer":"https://fund.eastmo
 export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|null>{
  try{
   const base="https://fundmobapi.eastmoney.com/FundMNewApi/";
-  const params="?FCODE="+code+"&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0";
+  const params="?FCODE="+code+"&deviceid=weis-finance&plat=Android&product=EFund&version=6.2.8";
   const [holdRes,navRes]=await Promise.all([
    fetch(base+"FundMNInverstPosition"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:600}}),
    fetch(base+"FundMNDetailInformation"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:60}})
