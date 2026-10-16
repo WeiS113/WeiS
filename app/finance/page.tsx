@@ -370,6 +370,7 @@ export default function FinancePage() {
     <main className="min-h-screen bg-[#f4f5f9] px-4 py-8 text-slate-800 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">← 返回 WeiS</Link>
+        <Link href="/finance/research" className="ml-4 inline-flex rounded-full bg-white px-3 py-1.5 text-sm font-medium text-rose-700 shadow-sm">基金研究 · 多基金对比 →</Link>
         <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">基金盘中估值 · 实时动态 · 预估收益</p></div>
           <button type="button" onClick={() => {void refresh();setEstimateRefreshTick(x=>x+1);}} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
