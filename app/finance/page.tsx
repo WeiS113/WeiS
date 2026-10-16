@@ -212,7 +212,7 @@ export default function FinancePage(){
   const market=nav!==null?q*nav:null;
   const profit=market!==null?market-invested:null;
   const today=base!==null?q*(nav!-base):null;
-  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:(platformCurves[code]?.length>=2?platformCurves[code]:curves[code]||[]),stocks:estimate?.stocks||[],coverage:estimate?.coverage};
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:platformCurves[code]||[],stocks:estimate?.stocks||[],coverage:estimate?.coverage};
  });
  const held=positions.filter(x=>x.q>0);
  const valueKnown=held.filter(x=>x.market!==null);
@@ -270,8 +270,8 @@ export default function FinancePage(){
           {segments.filter(s=>s.length>=2).map((s,i)=><polyline key={i} points={s.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>)}
           <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
         </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
-        <p className="mt-2 text-[11px] text-amber-700">{platformCurves[x.code]?.length>=2?"基金平台分时估值":"本设备采样"}：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。平台没有提供的时段留空。</p></>;
-      })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">尚无足够的有效盘中采样。网页打开前的历史分钟估值未被记录，不能自行补造。</p>}</div>
+        <p className="mt-2 text-[11px] text-amber-700">基金平台分时估值：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。平台没有提供的时段留空。</p></>;
+      })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">基金平台未返回足够的当日分时估值数据；不会使用本机采样冒充平台全天走势。</p>}</div>
       {x.stocks.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer text-slate-600">披露重仓股 · 覆盖 {x.coverage??"—"}%</summary><div className="mt-2 space-y-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between gap-2"><span>{s.name} {s.code}</span><span>{s.weight.toFixed(2)}% · {signed(s.change)}</span></div>)}</div></details>}
       {issues[x.code]&&<details className="mt-3 text-xs text-amber-700"><summary className="cursor-pointer">盘中估算暂不可用 · 查看原因</summary><p className="mt-2">{issues[x.code]}</p></details>}
       <div className="mt-4 flex items-center gap-2 border-t border-slate-200 pt-3"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-600">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">历史净值</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto text-xs text-slate-400">移除</button></div>
