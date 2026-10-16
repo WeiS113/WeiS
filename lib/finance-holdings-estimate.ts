@@ -17,7 +17,7 @@ export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|
   if(nav===null||nav<=0)return null;
   const stocks=h?.Datas?.fundStocks;
   if(!Array.isArray(stocks)||stocks.length<3)return null;
-  const valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??""),name:String(x.GPJC??""),weight:num(x.JZBL)})).filter((x:{code:string;weight:number|null})=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
+  const valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??""),name:String(x.GPJC??""),weight:num(x.JZBL)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
   if(valid.length<3)return null;
   const quotes=await Promise.all(valid.map(async (x:{code:string;name:string;weight:number})=>{
     try{
