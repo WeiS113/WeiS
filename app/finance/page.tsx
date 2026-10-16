@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../components/FinanceHistory";
 import { supabase } from "../../lib/supabase";
@@ -28,6 +28,7 @@ export default function FinancePage() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [chartCode, setChartCode] = useState<string | null>(null);
+  const refreshId = useRef(0);
 
   useEffect(() => {
     try { const saved = localStorage.getItem(KEY); setItems(saved ? JSON.parse(saved) : START); }
@@ -63,6 +64,7 @@ export default function FinancePage() {
   const money = (x: number) => "¥" + x.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshId.current;
     if (!items.length) { setQuotes({}); return; }
     setLoading(true);
     try {
@@ -71,14 +73,15 @@ export default function FinancePage() {
         if (!response.ok) return null;
         return await response.json() as Quote;
       }));
+      if (requestId !== refreshId.current) return;
       setQuotes(Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q])));
       setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
       setMessage(data.some(q => !q) ? "部分行情获取失败，请稍后重试。" : "");
-    } catch { setQuotes({}); setMessage("行情服务暂不可用。"); }
-    finally { setLoading(false); }
+    } catch { if (requestId === refreshId.current) { setQuotes({}); setMessage("行情服务暂不可用。"); } }
+    finally { if (requestId === refreshId.current) setLoading(false); }
   }, [items]);
 
-  useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 60000); return () => clearInterval(t); }, [refresh]);
+  useEffect(() => { void refresh(); const t = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60000); return () => { clearInterval(t); refreshId.current += 1; }; }, [refresh]);
 
   useEffect(() => {
     const q = input.trim();
