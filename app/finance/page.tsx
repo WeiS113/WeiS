@@ -94,7 +94,7 @@ export default function FinancePage(){
   cloudBusy.current=false;
   if(error||!data){setCloudStatus("读取失败或云端尚无数据："+(error?.message??"无数据"));return;}
   if(!window.confirm("载入云端持仓会替换当前设备上的基金列表、份额与成本，继续吗？"))return;
-  const savedCodes=Array.isArray(data.codes)?data.codes.filter((x:unknown)=>typeof x==="string"&&/^\\d{6}$/.test(x)):[];
+  const savedCodes=Array.isArray(data.codes)?data.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[];
   setCodes(savedCodes);
   setNames(data.names&&typeof data.names==="object"&&!Array.isArray(data.names)?data.names as Record<string,string>:{});
   setHoldings(data.holdings&&typeof data.holdings==="object"&&!Array.isArray(data.holdings)?data.holdings as Record<string,Holding>:{});
