@@ -3,10 +3,11 @@
 import {
   ReactNode,
   useEffect,
-  useState,
+
 } from "react";
 
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 type RealtimeSyncProps = {
@@ -17,9 +18,9 @@ export default function RealtimeSync({
   children,
 }: RealtimeSyncProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
-  const [version, setVersion] =
-    useState(0);
+
 
   useEffect(() => {
     if (pathname === "/login") {
@@ -36,10 +37,7 @@ export default function RealtimeSync({
           table: "tasks",
         },
         () => {
-          setVersion(
-            (current) =>
-              current + 1
-          );
+          router.refresh();
         }
       )
       .on(
@@ -50,10 +48,7 @@ export default function RealtimeSync({
           table: "projects",
         },
         () => {
-          setVersion(
-            (current) =>
-              current + 1
-          );
+          router.refresh();
         }
       )
       .subscribe((status) => {
@@ -80,11 +75,7 @@ export default function RealtimeSync({
         channel
       );
     };
-  }, [pathname]);
+  }, [pathname, router]);
 
-  return (
-    <div key={version}>
-      {children}
-    </div>
-  );
+  return <>{children}</>;
 }
