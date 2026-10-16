@@ -6,6 +6,7 @@ type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
 type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number};
 type Search={code:string;name:string;kind:"fund"|"stock"};
+type CurvePoint={at:number;change:number};
 const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
@@ -24,6 +25,9 @@ export default function FinancePage(){
  const [estimates,setEstimates]=useState<Record<string,Estimate>>({});
  const [issues,setIssues]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(false);
+ const [curves,setCurves]=useState<Record<string,CurvePoint[]>>({});
+ const [expanded,setExpanded]=useState<string|null>(null);
+ const [showUnavailable,setShowUnavailable]=useState(true);
  const [updated,setUpdated]=useState("");
  const [input,setInput]=useState("");
  const [results,setResults]=useState<Search[]>([]);
@@ -61,6 +65,7 @@ export default function FinancePage(){
    for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
    setQuotes(prev=>({...prev,...newQuotes}));
    const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
+   setCurves(prev=>{const next={...prev};const now=Date.now();for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!isFresh(e.time))continue;const prior=(prev[e.code]||[]).filter(p=>now-p.at<6*3600000);if(prior.length&&now-prior[prior.length-1].at<30000)continue;next[e.code]=[...prior,{at:now,change:e.change}].slice(-180);}return next;});
    setEstimates(prev=>{
     const next={...prev};
     for(const e of obtained)next[e.code]=e;
@@ -114,7 +119,7 @@ export default function FinancePage(){
   const market=nav!==null?q*nav:null;
   const profit=market!==null?market-invested:null;
   const today=base!==null?q*(nav!-base):null;
-  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据"};
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:curves[code]||[],stocks:estimate?.stocks||[],coverage:estimate?.coverage};
  });
  const held=positions.filter(x=>x.q>0);
  const valueKnown=held.filter(x=>x.market!==null);
@@ -141,7 +146,13 @@ export default function FinancePage(){
      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><Link href={"/finance/fund/"+x.code} className="font-semibold hover:text-rose-600">{x.name}</Link><p className="mt-1 text-xs text-slate-400">{x.code} · {x.live?"盘中参考估值":"最近公布净值或暂无行情"}</p><p className="mt-1 text-xs text-slate-400">{x.source} · {x.time||"尚无更新时间"}</p></div>
      <div className="text-right"><p className={"text-xl font-bold tabular-nums "+(x.change===null?"text-slate-400":positive(x.change))}>{x.change===null?"暂无盘中涨跌":signed(x.change)}</p><p className="mt-1 text-sm tabular-nums text-slate-500">每份 {x.nav===null?"—":x.nav.toFixed(4)}</p></div></div>
      <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-xs sm:grid-cols-4"><div><p className="text-slate-400">持有份额 / 成本</p><p className="mt-1 font-semibold">{x.q.toLocaleString("zh-CN")} 份 / {x.c.toFixed(4)}</p></div><div><p className="text-slate-400">当前估算市值</p><p className="mt-1 font-semibold">{x.market===null?"—":money(x.market)}</p></div><div><p className="text-slate-400">累计浮盈亏</p><p className={"mt-1 font-semibold "+(x.profit===null?"text-slate-400":positive(x.profit))}>{x.profit===null?"—":(x.profit>=0?"+":"")+money(x.profit)}</p></div><div><p className="text-slate-400">今日预估收益</p><p className={"mt-1 font-semibold "+(x.today===null?"text-slate-400":positive(x.today))}>{x.today===null?"—":(x.today>=0?"+":"")+money(x.today)}</p></div></div>
-     {issues[x.code]&&<p className="mt-2 text-xs text-amber-700">估值状态：{issues[x.code]}</p>}
+     <div className="mt-3 rounded-xl border border-slate-100 p-3"><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-slate-600">盘中估算走势</span><span className="text-[11px] text-slate-400">{x.curve.length} 个有效行情采样点 · 当前页面会话</span></div>{x.curve.length>=2?(()=>{
+       const values=x.curve.map(p=>p.change);const min=Math.min(-0.1,...values),max=Math.max(0.1,...values);const range=max-min||1;
+       const pts=x.curve.map((p,i)=>(10+i/Math.max(1,x.curve.length-1)*680).toFixed(1)+","+(104-(p.change-min)/range*88).toFixed(1)).join(" ");
+       return <svg viewBox="0 0 700 122" role="img" aria-label={x.name+"盘中估算涨跌走势"} className="mt-2 w-full"><line x1="10" x2="690" y1={104-(0-min)/range*88} y2={104-(0-min)/range*88} stroke="#94a3b8" strokeDasharray="5 5"/><polyline points={pts} stroke={x.change!==null&&x.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" fill="none" strokeLinejoin="round" strokeLinecap="round"/></svg>;
+      })():<p className="py-3 text-xs text-slate-400">{x.live?"继续保持页面打开，收集第二个有效盘中行情点后绘制走势图。":"盘中数据源暂不可用，不能生成真实估值走势。"}</p>}</div>
+     {x.stocks.length>0&&<div className="mt-2"><button type="button" onClick={()=>setExpanded(expanded===x.code?null:x.code)} className="text-xs font-semibold text-slate-500">{expanded===x.code?"收起":"展开"}披露重仓股（覆盖 {x.coverage??"—"}%）</button>{expanded===x.code&&<div className="mt-2 grid gap-2 sm:grid-cols-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs"><span>{s.name} · {s.code}</span><span>{s.weight.toFixed(2)}% · <span className={positive(s.change)}>{signed(s.change)}</span></span></div>)}</div>}</div>}
+     {showUnavailable&&issues[x.code]&&<p className="mt-2 text-xs text-amber-700">估值状态：{issues[x.code]}</p>}
      <div className="mt-3 flex gap-2"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">查看净值走势</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto rounded-lg px-3 py-2 text-xs text-slate-400">移除</button></div>
     </div>)}</div>{!codes.length&&<p className="py-12 text-center text-sm text-slate-500">暂无基金，输入代码即可添加。</p>}
    </section>
