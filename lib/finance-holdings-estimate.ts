@@ -17,9 +17,10 @@ export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|
   if(nav===null||nav<=0)return null;
   const typeText=String(n?.Datas?.FTYPE??n?.Datas?.FUNDTYPE??"");
   if(/债券|货币|QDII|海外|商品|黄金|FOF|养老/.test(typeText))return null;
-  const stocks=h?.Datas?.fundStocks;
+  const payload=h?.Datas;
+  const stocks=[payload?.fundStocks,payload?.FundStocks,payload?.fundStockList,payload?.stockList,payload?.List,Array.isArray(payload)?payload:null].find(Array.isArray);
   if(!Array.isArray(stocks)||stocks.length<3)return null;
-  const valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??""),name:String(x.GPJC??""),weight:num(x.JZBL)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
+  const valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??x.STOCKCODE??x.CODE??""),name:String(x.GPJC??x.STOCKNAME??x.NAME??""),weight:num(x.JZBL??x.ZJZBL??x.WEIGHT)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
   if(valid.length<3)return null;
   const quotes=await Promise.all(valid.map(async (x:{code:string;name:string;weight:number})=>{
     try{
