@@ -44,11 +44,11 @@ export async function estimateFromHoldings(code:string, report?: (reason:string)
   const base="https://fundmobapi.eastmoney.com/FundMNewApi/";
   const params="?FCODE="+code+"&deviceid=weis-finance&plat=Android&product=EFund&version=6.2.8";
   const [holdRes,navRes]=await Promise.all([
-   fetch(base+"FundMNInverstPosition"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:600}}),
+   fetch(base+"FundMNInverstPosition"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:600}}).catch(()=>null),
    fetch(base+"FundMNDetailInformation"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:60}})
   ]);
   if(!navRes.ok)return fail("基金净值接口 HTTP 异常："+navRes.status);
-  const h=holdRes.ok?await holdRes.json():{},n=await navRes.json();
+  const h=holdRes?.ok?await holdRes.json().catch(()=>({})): {},n=await navRes.json();
   const nav=num(n?.Datas?.DWJZ);
   if(nav===null||nav<=0)return fail("无法获得有效的已公布单位净值");
   const typeText=String(n?.Datas?.FTYPE??n?.Datas?.FUNDTYPE??"");
