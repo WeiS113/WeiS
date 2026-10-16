@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../components/FinanceHistory";
+import FinanceIndices from "../../components/FinanceIndices";
 import FinanceImageImport, { type Recognized } from "../../components/FinanceImageImport";
 import { supabase } from "../../lib/supabase";
 
@@ -325,6 +326,7 @@ export default function FinancePage() {
             <p className="mt-2 text-xs text-slate-400">估算可能过期；需核对时间，不等于成交价</p>
           </div>
         </section>
+        <FinanceIndices />
         <nav aria-label="Finance 页面分类" className="mt-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
           {([{ id: "holdings", text: "我的持仓" }, { id: "watchlist", text: "自选与搜索" }, { id: "settings", text: "导入与同步" }] as const).map(tab => <button key={tab.id} type="button" onClick={() => setView(tab.id)} className={`whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-medium ${view === tab.id ? "bg-slate-900 text-white" : "bg-white/80 text-slate-600"}`}>{tab.text}</button>)}
         </nav>
