@@ -6,7 +6,15 @@ export const dynamic = "force-dynamic";
 type Candidate = { code: string; kind: "stock" | "fund"; name: string; quantity: number | null; cost: number | null; warning: string };
 
 export async function POST(request: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: "管理员尚未配置 OPENAI_API_KEY，截图识别暂不可用" }, { status: 503 });
+  const provider = (process.env.FINANCE_OCR_PROVIDER || "openai").toLowerCase();
+  const configs: Record<string, { key?: string; endpoint: string; model: string }> = {
+    openai: { key: process.env.OPENAI_API_KEY, endpoint: "https://api.openai.com/v1/chat/completions", model: "gpt-4.1-mini" },
+    qwen: { key: process.env.DASHSCOPE_API_KEY, endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen3-vl-plus" },
+    doubao: { key: process.env.ARK_API_KEY, endpoint: "https://ark.cn-beijing.volces.com/api/v3/chat/completions", model: "doubao-seed-2-0-lite-260215" },
+    kimi: { key: process.env.MOONSHOT_API_KEY, endpoint: "https://api.moonshot.cn/v1/chat/completions", model: "kimi-k2.5" }
+  };
+  const config = configs[provider];
+  if (!config?.key) return NextResponse.json({ error: "图片识别尚未配置，请设置 FINANCE_OCR_PROVIDER 和相应服务端 API Key" }, { status: 503 });
   const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
   if (!bearer) return NextResponse.json({ error: "请先登录" }, { status: 401 });
   try {
@@ -25,13 +33,12 @@ export async function POST(request: NextRequest) {
     const timeout = setTimeout(() => controller.abort(), 25000);
     let response: Response;
     try {
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
+      response = await fetch(config.endpoint, {
         method: "POST", signal: controller.signal,
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: process.env.FINANCE_OCR_MODEL || "gpt-4.1-mini",
-          temperature: 0,
-          response_format: { type: "json_object" },
+          model: process.env.FINANCE_OCR_MODEL || config.model,
+
           messages: [
             { role: "system", content: "Extract investment positions from Chinese brokerage/fund APP screenshots. Return JSON only: {positions:[{code,kind,name,quantity,cost,warning}]}. kind is stock for stocks/exchange-traded ETF, fund for off-exchange mutual funds. code must be a visible six-digit asset code (preserve leading zeros); never infer from name. quantity is held shares/units ONLY, cost is per-unit acquisition cost ONLY, not market price, market value, or total investment. If not explicitly readable use null. Never guess; put uncertainty in warning. Ignore totals, account IDs, balances, transactions, and personal details. Up to 30 positions." },
             { role: "user", content: [{ type: "text", text: "识别这张持仓截图中明确可读的产品代码、名称、实际持有份额/股数与单位持仓成本。不要把现价、累计收益、参考市值当作成本或份额。" }, { type: "image_url", image_url: { url: imageUrl, detail: "high" } }] }
