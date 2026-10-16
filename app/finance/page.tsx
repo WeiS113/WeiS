@@ -428,7 +428,21 @@ export default function FinancePage() {
               {<button type="button" onClick={() => setChartCode(chartCode === item.kind + item.code ? null : item.kind + item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.kind + item.code ? "收起走势" : "查看走势"}</button>}
               <button aria-label={`移除 ${item.code}`} title="移除自选" onClick={() => updateItems(items.filter(x => !(x.code === item.code && x.kind === item.kind)))} className="ml-2 rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600">✕</button>
               <div className="basis-full grid grid-cols-2 gap-3 pt-2 sm:ml-auto sm:basis-auto sm:w-[310px]"><label className="text-xs text-slate-500">持有份额 / 股数<input aria-label={`${item.code} 持有份额或股数`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.quantity ?? 0} onChange={e => setHolding(item.kind + item.code, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-xs text-slate-500">单位成本（元）<input aria-label={`${item.code} 单位成本`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.cost ?? 0} onChange={e => setHolding(item.kind + item.code, "cost", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label></div>
-              {chartCode === item.kind + item.code && <div className="w-full basis-full border-t border-slate-100 pt-4"><FinanceHistory code={item.code} kind={item.kind} /></div>}
+              {chartCode === item.kind + item.code && <div className="w-full basis-full border-t border-slate-100 pt-4">
+                {item.kind === "fund" && (() => {
+                  const series = estimateSeries[item.code] || [];
+                  const values = series.map(p=>p.change);
+                  const min = values.length ? Math.min(...values,0) : -1;
+                  const max = values.length ? Math.max(...values,0) : 1;
+                  const range = Math.max(max-min,0.01);
+                  const polyline = series.map((p,i)=>((24+i/Math.max(1,series.length-1)*652).toFixed(1))+","+((170-(p.change-min)/range*140).toFixed(1))).join(" ");
+                  return <div className="rounded-2xl bg-slate-50 p-4 sm:p-5">
+                    <div className="flex flex-wrap justify-between gap-2"><div><h3 className="font-semibold text-slate-800">今日盘中估值走势</h3><p className="mt-1 text-xs text-slate-500">仅展示本设备实际采集的估算点，不代表官方实时净值</p></div><span className="text-xs text-slate-500">{series.length} 个采样点</span></div>
+                    {series.length < 2 ? <p className="py-9 text-center text-sm text-slate-400">尚未积累足够的今日盘中数据，页面保持开启后将自动采样</p> : <><div className="mt-3 flex items-center justify-between text-xs text-slate-500"><span>{min.toFixed(2)}%</span><span>最新 {values[values.length-1].toFixed(2)}%</span><span>{max.toFixed(2)}%</span></div><svg viewBox="0 0 700 190" role="img" aria-label={item.code+" 今日基金估算涨跌折线图"} className="w-full"><line x1="24" x2="676" y1={170-((0-min)/range*140)} y2={170-((0-min)/range*140)} stroke="#94a3b8" strokeDasharray="4 4"/><polyline points={polyline} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/></svg><div className="flex justify-between text-xs text-slate-400"><span>{new Date(series[0].at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</span><span>{new Date(series[series.length-1].at).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}</span></div></>}
+                  </div>;
+                })()}
+                <FinanceHistory code={item.code} kind={item.kind} />
+              </div>}
             </div>; })}
           </div>}
         </section>
