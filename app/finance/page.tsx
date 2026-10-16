@@ -11,7 +11,7 @@ type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number
 type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
 type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
-type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string; coverage?:number; disclosure?:string|null; stocks?: {code:string;name:string;weight:number;change:number}[] };
+type Estimate = { name?:string; estimatedNav: number | null; change: number | null; time: string | null; source: string; coverage?:number; disclosure?:string|null; stocks?: {code:string;name:string;weight:number;change:number}[] };
 type EstimatePoint = { at: number; change: number };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const GROUPS_KEY = "weis-finance-groups-v1";
@@ -377,7 +377,7 @@ export default function FinancePage() {
               const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&e.change!=null&&e.change>-99&&(h?.quantity??0)>0;
               const delta=hasEstimate?h!.quantity*e!.estimatedNav!*e!.change!/(100+e!.change!):null;
               return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-4">
-                <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {e?.source||"尚无估算源"} · 估算时间 {e?.time||"未提供"}{e?.coverage!=null?" · 披露持仓覆盖 "+e.coverage.toFixed(1)+"%":""}{e?.disclosure?" · 披露截止 "+e.disclosure:""}</p></div>
+                <div><p className="text-sm font-medium">{q?.name||e?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {e?.source||"尚无估算源"} · 估算时间 {e?.time||"未提供"}{e?.coverage!=null?" · 披露持仓覆盖 "+e.coverage.toFixed(1)+"%":""}{e?.disclosure?" · 披露截止 "+e.disclosure:""}</p></div>
                 {(() => {
                   const points = estimateSeries[item.code] || [];
                   if (points.length < 2) return <p className="w-24 text-center text-[11px] text-slate-400">等待走势采样</p>;
