@@ -18,7 +18,10 @@ async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
   const code=String(x.FCODE);
   if(!codes.includes(code))continue;
   const n=numeric(x.GSZ),percent=numeric(x.GSZZL),time=typeof x.GZTIME==="string"&&x.GZTIME.length<=32?x.GZTIME:null;
-  result.set(code,{code,estimatedNav:n!==null&&n>0&&n<10000?n:null,change:percent!==null&&Math.abs(percent)<=100?percent:null,time,source:"天天基金盘中估算（非官方净值）"});
+  const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+  const datePart=time?.match(/^20\d{2}-\d{2}-\d{2}/)?.[0];
+  const source=datePart&&datePart!==day?"天天基金历史时点估算（非今日实时）":"天天基金盘中估算（非官方净值）";
+  result.set(code,{code,estimatedNav:n!==null&&n>0&&n<10000?n:null,change:percent!==null&&Math.abs(percent)<=100?percent:null,time,source});
  }
  return result;
 }
