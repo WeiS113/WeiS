@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../components/FinanceHistory";
+import { supabase } from "../../lib/supabase";
 
 type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
 type Saved = { code: string; kind: "stock" | "fund" };
@@ -24,6 +25,8 @@ export default function FinancePage() {
   const [lastRefresh, setLastRefresh] = useState("");
   const [matches, setMatches] = useState<SearchResult[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
   const [chartCode, setChartCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -92,6 +95,77 @@ export default function FinancePage() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [input]);
 
+  async function syncToCloud() {
+    setSyncBusy(true); setSyncMessage("");
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("请先登录后使用云同步");
+      const watch = items.map(x => ({ user_id: user.id, asset_key: x.kind + x.code }));
+      const positionRows = items.filter(x => holdings[x.kind + x.code]).map(x => ({
+        user_id: user.id, asset_key: x.kind + x.code,
+        quantity: holdings[x.kind + x.code].quantity, cost: holdings[x.kind + x.code].cost
+      }));
+      const [oldWatch, oldHoldings] = await Promise.all([
+        supabase.from("finance_watchlist").select("asset_key").eq("user_id", user.id),
+        supabase.from("finance_holdings").select("asset_key").eq("user_id", user.id)
+      ]);
+      if (oldWatch.error || oldHoldings.error) throw new Error("无法读取云端数据，请先运行 supabase/finance.sql 建表");
+      if (watch.length) {
+        const { error } = await supabase.from("finance_watchlist").upsert(watch, { onConflict: "user_id,asset_key" });
+        if (error) throw error;
+      }
+      if (positionRows.length) {
+        const { error } = await supabase.from("finance_holdings").upsert(positionRows, { onConflict: "user_id,asset_key" });
+        if (error) throw error;
+      }
+      const watchKeys = new Set(watch.map(x => x.asset_key));
+      const positionKeys = new Set(positionRows.map(x => x.asset_key));
+      const staleWatch = (oldWatch.data || []).filter(x => !watchKeys.has(x.asset_key)).map(x => x.asset_key);
+      const stalePositions = (oldHoldings.data || []).filter(x => !positionKeys.has(x.asset_key)).map(x => x.asset_key);
+      if (staleWatch.length) {
+        const { error } = await supabase.from("finance_watchlist").delete().eq("user_id", user.id).in("asset_key", staleWatch);
+        if (error) throw error;
+      }
+      if (stalePositions.length) {
+        const { error } = await supabase.from("finance_holdings").delete().eq("user_id", user.id).in("asset_key", stalePositions);
+        if (error) throw error;
+      }
+      setSyncMessage("已将本浏览器的自选和持仓上传到云端");
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "同步失败，请重试");
+    } finally { setSyncBusy(false); }
+  }
+
+  async function restoreFromCloud() {
+    if (!window.confirm("从云端恢复会覆盖此浏览器现有的自选与持仓，确认继续吗？")) return;
+    setSyncBusy(true); setSyncMessage("");
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error("请先登录后使用云同步");
+      const [watch, saved] = await Promise.all([
+        supabase.from("finance_watchlist").select("asset_key").eq("user_id", user.id).order("created_at"),
+        supabase.from("finance_holdings").select("asset_key,quantity,cost").eq("user_id", user.id)
+      ]);
+      if (watch.error || saved.error) throw new Error("云端读取失败，请确认数据库表和权限已创建");
+      const next: Saved[] = (watch.data || []).filter(x => /^(stock|fund)\d{6}$/.test(x.asset_key)).map(x => ({
+        kind: x.asset_key.startsWith("stock") ? "stock" as const : "fund" as const,
+        code: x.asset_key.slice(x.asset_key.startsWith("stock") ? 5 : 4)
+      }));
+      const nextHoldings: Record<string, Holding> = {};
+      for (const x of saved.data || []) {
+        const quantity = Number(x.quantity), cost = Number(x.cost);
+        if (Number.isFinite(quantity) && Number.isFinite(cost) && quantity >= 0 && cost >= 0)
+          nextHoldings[x.asset_key] = { quantity, cost };
+      }
+      setItems(next); setHoldings(nextHoldings);
+      localStorage.setItem(KEY, JSON.stringify(next));
+      localStorage.setItem(HOLDINGS_KEY, JSON.stringify(nextHoldings));
+      setSyncMessage("已从云端恢复自选与持仓");
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "恢复失败，请重试");
+    } finally { setSyncBusy(false); }
+  }
+
   function updateItems(next: Saved[]) { setItems(next); localStorage.setItem(KEY, JSON.stringify(next)); }
   function addResult(result: Saved) {
     if (items.some(x => x.code === result.code && x.kind === result.kind)) { setMessage("已在自选列表中"); return; }
@@ -112,7 +186,17 @@ export default function FinancePage() {
           <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">个人股票 · ETF · 基金自选行情</p></div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
         </div>
-        <section className="mt-8 grid gap-3 sm:grid-cols-3">
+        <section className="mt-7 rounded-2xl border border-white/90 bg-white/75 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-sm font-semibold">跨设备数据同步</h2><p className="mt-1 text-xs text-slate-500">手动上传当前浏览器的数据，或从云端覆盖恢复；首次使用需先在 Supabase 执行建表脚本。</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={syncBusy} onClick={() => void syncToCloud()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">上传到云端</button>
+              <button type="button" disabled={syncBusy} onClick={() => void restoreFromCloud()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm disabled:opacity-50">从云端恢复</button>
+            </div>
+          </div>
+          {syncMessage && <p role="status" className="mt-3 text-xs text-slate-600">{syncMessage}</p>}
+        </section>
+        <section className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已录入持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalCost)}</p></div>
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalMarket)}</p></div>
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(totalMarket - knownCost)}</p></div>
