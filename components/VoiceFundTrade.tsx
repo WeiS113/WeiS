@@ -6,15 +6,34 @@ type Recognition={lang:string;continuous:boolean;interimResults:boolean;onresult
 type RecognitionWindow=Window&{SpeechRecognition?:new()=>Recognition;webkitSpeechRecognition?:new()=>Recognition};
 const today=()=>new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
 function parseDay(s:string){const now=new Date();if(/前天/.test(s))now.setDate(now.getDate()-2);else if(/昨天/.test(s))now.setDate(now.getDate()-1);else if(/今天/.test(s)){}else {const m=s.match(/(20\d{2})[年/-](\d{1,2})[月/-](\d{1,2})/);if(m)return [m[1],m[2].padStart(2,"0"),m[3].padStart(2,"0")].join("-");const n=s.match(/(\d{1,2})月(\d{1,2})[日号]?/);if(n)return [String(now.getFullYear()),n[1].padStart(2,"0"),n[2].padStart(2,"0")].join("-");}return now.toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});}
-function parseMoney(s:string){const m=s.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*元?/);if(!m)return null;return Number(m[1])*(m[2]==="万"?10000:m[2]==="千"?1000:1);}
+function chineseAmount(source:string):number|null{
+ const text=source.replace(/两/g,"二").replace(/块钱|块|人民币/g,"元");
+ const digits:Record<string,number>={"零":0,"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};
+ const chunk=(s:string)=>{
+  let value=0,number=0;
+  for(const char of s){if(char in digits)number=digits[char];else if(char==="十"||char==="百"||char==="千"){const unit=char==="十"?10:char==="百"?100:1000;value+=(number||1)*unit;number=0;}else return null;}
+  return value+number;
+ };
+ const m=text.match(/([零一二三四五六七八九十百千万]+)元?/);
+ if(!m)return null;
+ const parts=m[1].split("万");if(parts.length>2)return null;
+ const high=parts.length===2?chunk(parts[0])??1:0;
+ const low=chunk(parts[parts.length-1]||"");
+ if(low===null)return null;
+ const total=high*10000+low;
+ return total>0?total:null;
+}
+function parseMoney(s:string){
+ const m=s.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*元?/);
+ if(m)return Number(m[1])*(m[2]==="万"?10000:m[2]==="千"?1000:1);
+ return chineseAmount(s);
+}
 function extract(s:string,funds:Fund[]){
  const text=s.replace(/\s+/g,"").replace(/[，。！]/g,"");
  const verb=text.match(/买入|申购|加仓|卖出|赎回|减仓/);if(!verb)return null;
  const side:"buy"|"sell"=/买入|申购|加仓/.test(verb[0])?"buy":"sell";
  const after=text.slice((verb.index??0)+verb[0].length);
- const amountMatch=after.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*元?/);
- if(!amountMatch)return null;
- const amount=parseMoney(amountMatch[0]);if(!amount||amount<=0)return null;
+ const amount=parseMoney(after);if(!amount||amount<=0)return null;
  const date=parseDay(text);
  const code=text.match(/(?<!\d)\d{6}(?!\d)/)?.[0];
  const candidates=funds.filter(f=>code?f.code===code:(f.name&&text.includes(f.name))||(f.name?.length>=4&&text.includes(f.name.slice(0,4))));
@@ -63,7 +82,7 @@ export default function VoiceFundTrade({funds,onApply}:{funds:Fund[];onApply:(tr
  </button>
  {open&&<div role="dialog" aria-modal="true" aria-label="语音基金交易" className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-3 sm:items-center"><div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
   <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">语音记一笔</h2><button type="button" onClick={()=>{recog.current?.stop();setOpen(false);}} className="rounded-lg px-3 py-2 text-slate-500">关闭 ✕</button></div>
-  <p className="mt-1 text-xs leading-5 text-slate-500">例如：“今天买入110022一千元”（金额请说阿拉伯数字更准确），或“昨天卖出025637 500元”。识别后必须确认才会改持仓。</p>
+  <p className="mt-1 text-xs leading-5 text-slate-500">例如：“今天买入110022一千元”，或“昨天卖出025637 500元”。识别后必须确认才会改持仓。</p>
   <button type="button" onClick={listening?()=>recog.current?.stop():start} className={"mt-4 w-full rounded-xl px-4 py-3 font-semibold text-white "+(listening?"bg-slate-800":"bg-rose-600")}>{listening?"● 正在聆听 · 点击结束":"🎙 开始说话"}</button>
   <textarea rows={2} value={utterance} onChange={e=>analyze(e.target.value)} placeholder="也可以输入：今天买入110022 1000元" className="mt-3 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm"/>
   <button type="button" onClick={()=>analyze(utterance)} className="mt-1 text-xs font-semibold text-rose-600">重新解析指令</button>
