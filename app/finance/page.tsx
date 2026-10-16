@@ -10,6 +10,7 @@ type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number
 type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
 type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
+type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const KEY = "weis-finance-watchlist";
 const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kind: "stock" }, { code: "110022", kind: "fund" }];
@@ -17,6 +18,7 @@ const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kin
 export default function FinancePage() {
   const [items, setItems] = useState<Saved[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
   const [holdingReady, setHoldingReady] = useState(false);
   const [input, setInput] = useState("");
@@ -84,6 +86,24 @@ export default function FinancePage() {
   }, [items]);
 
   useEffect(() => { void refresh(); const t = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60000); return () => { clearInterval(t); refreshId.current += 1; }; }, [refresh]);
+
+  useEffect(() => {
+    const funds = items.filter(x => x.kind === "fund");
+    let cancelled = false;
+    async function fetchEstimates() {
+      if (funds.length === 0) { if (!cancelled) setEstimates({}); return; }
+      const rows = await Promise.all(funds.map(async x => {
+        try {
+          const res = await fetch("/api/finance/estimate?code=" + encodeURIComponent(x.code), { cache: "no-store" });
+          return [x.code, res.ok ? await res.json() as Estimate : { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const;
+        } catch { return [x.code, { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const; }
+      }));
+      if (!cancelled) setEstimates(Object.fromEntries(rows));
+    }
+    void fetchEstimates();
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void fetchEstimates(); }, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [items]);
 
   useEffect(() => {
     const q = input.trim();
@@ -257,7 +277,7 @@ export default function FinancePage() {
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
         </section>
         {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金：当前显示的是 <strong className="text-slate-700">最近公布的官方单位净值</strong>；盘中估值需另接可验证的数据源，现阶段标记为不可用。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
         <nav aria-label="Finance 页面分类" className="mt-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
           {([{ id: "holdings", text: "我的持仓" }, { id: "watchlist", text: "自选与搜索" }, { id: "settings", text: "导入与同步" }] as const).map(tab => <button key={tab.id} type="button" onClick={() => setView(tab.id)} className={`whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-medium ${view === tab.id ? "bg-slate-900 text-white" : "bg-white/80 text-slate-600"}`}>{tab.text}</button>)}
         </nav>
@@ -298,8 +318,8 @@ export default function FinancePage() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">{view === "holdings" ? "我的资产" : "我的自选"} <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
           {items.length === 0 ? <p className="p-8 text-center text-slate-400">还没有自选，输入代码添加</p> : <div className="divide-y divide-slate-100">
             {items.map(item => { const q = quotes[item.kind + item.code]; const change = q?.change; return <div key={item.kind + item.code} className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-7">
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}{item.kind === "fund" && " · 盘中估值暂不可用"}</p></div>
-              <div className="text-right"><p className="font-semibold tabular-nums">{q?.price == null ? "—" : q.price.toFixed(4)}</p><p className={`mt-1 text-sm font-medium tabular-nums ${change == null ? "text-slate-400" : change >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{change == null ? "—" : (change > 0 ? "+" : "") + change.toFixed(2) + "%"}</p><p className="text-[10px] text-slate-400">{q?.time || "暂无更新时间"}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}{item.kind === "fund" && " · 已公布净值"}</p></div>
+              <div className="text-right"><p className="font-semibold tabular-nums">{q?.price == null ? "—" : q.price.toFixed(4)}</p><p className={`mt-1 text-sm font-medium tabular-nums ${change == null ? "text-slate-400" : change >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{change == null ? "—" : (change > 0 ? "+" : "") + change.toFixed(2) + "%"}</p><p className="text-[10px] text-slate-400">{q?.time || "暂无更新时间"}</p>{item.kind === "fund" && <p className="mt-1 text-xs text-amber-700">盘中估算：{estimates[item.code]?.estimatedNav == null ? "暂无" : estimates[item.code].estimatedNav!.toFixed(4)}{estimates[item.code]?.change == null ? "" : " / " + estimates[item.code].change!.toFixed(2) + "%"} <span className="text-slate-400">{estimates[item.code]?.time || ""}</span></p>}</div>
               {<button type="button" onClick={() => setChartCode(chartCode === item.kind + item.code ? null : item.kind + item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.kind + item.code ? "收起走势" : "查看走势"}</button>}
               <button aria-label={`移除 ${item.code}`} title="移除自选" onClick={() => updateItems(items.filter(x => !(x.code === item.code && x.kind === item.kind)))} className="ml-2 rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600">✕</button>
               <div className="basis-full grid grid-cols-2 gap-3 pt-2 sm:ml-auto sm:basis-auto sm:w-[310px]"><label className="text-xs text-slate-500">持有份额 / 股数<input aria-label={`${item.code} 持有份额或股数`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.quantity ?? 0} onChange={e => setHolding(item.kind + item.code, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-xs text-slate-500">单位成本（元）<input aria-label={`${item.code} 单位成本`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.cost ?? 0} onChange={e => setHolding(item.kind + item.code, "cost", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label></div>
