@@ -33,6 +33,7 @@ export default function FinancePage(){
  const [issues,setIssues]=useState<Record<string,string>>({});
  const [loading,setLoading]=useState(false);
  const [curves,setCurves]=useState<Record<string,CurvePoint[]>>({});
+ const [platformCurves,setPlatformCurves]=useState<Record<string,CurvePoint[]>>({});
  const [expanded,setExpanded]=useState<string|null>(null);
 
  const [updated,setUpdated]=useState("");
@@ -111,6 +112,22 @@ export default function FinancePage(){
   },1200);
   return()=>clearTimeout(timer);
  },[ready,cloudReady,cloudUser,codes,names,holdings]);
+ useEffect(()=>{
+  if(!ready||codes.length===0)return;
+  let active=true;
+  const pull=async()=>{
+   const results=await Promise.all(codes.slice(0,30).map(async code=>{
+    try{const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
+     if(!r.ok)return {code,points:[] as CurvePoint[]};
+     const d=await r.json();
+     return {code,points:Array.isArray(d.points)?(d.points as CurvePoint[]):[]};
+    }catch{return {code,points:[] as CurvePoint[]};}
+   }));
+   if(active)setPlatformCurves(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.points]))}));
+  };
+  void pull();const timer=setInterval(()=>void pull(),180000);
+  return()=>{active=false;clearInterval(timer);};
+ },[ready,codes]);
  const refresh=useCallback(async()=>{
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
@@ -195,7 +212,7 @@ export default function FinancePage(){
   const market=nav!==null?q*nav:null;
   const profit=market!==null?market-invested:null;
   const today=base!==null?q*(nav!-base):null;
-  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:curves[code]||[],stocks:estimate?.stocks||[],coverage:estimate?.coverage};
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:(platformCurves[code]?.length>=2?platformCurves[code]:curves[code]||[]),stocks:estimate?.stocks||[],coverage:estimate?.coverage};
  });
  const held=positions.filter(x=>x.q>0);
  const valueKnown=held.filter(x=>x.market!==null);
@@ -237,7 +254,7 @@ export default function FinancePage(){
       </div>
       <p className="mt-4 text-xs text-slate-400">{x.live?"盘中参考估值":"已公布净值或暂不可用"} · {x.time||"暂无时间"}</p>
       <p className="mt-1 text-[11px] text-slate-400">{x.source}</p>
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">当日实时估值变化</p><p className="mt-1 text-[11px] text-slate-400">交易日 09:30–11:30、13:00–15:00 · 每60秒采样</p></div><span className="text-xs font-semibold tabular-nums">{x.nav===null?"—":x.nav.toFixed(4)}</span></div>
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">当日实时估值变化</p><p className="mt-1 text-[11px] text-slate-400">交易日 09:30–11:30、13:00–15:00 · 优先平台分时数据</p></div><span className="text-xs font-semibold tabular-nums">{x.nav===null?"—":x.nav.toFixed(4)}</span></div>
       {x.curve.length>=2?(()=>{
         const usable=x.curve.filter(p=>marketMinute(p.at)!==null).sort((a,b)=>a.at-b.at);
         if(usable.length<2)return <p className="mt-3 text-xs text-slate-400">交易时段有效采样不足，无法显示连续走势。</p>;
@@ -253,7 +270,7 @@ export default function FinancePage(){
           {segments.filter(s=>s.length>=2).map((s,i)=><polyline key={i} points={s.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>)}
           <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
         </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
-        <p className="mt-2 text-[11px] text-amber-700">本设备实际采样：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。未采集的时段留空，不代表基金净值不变。</p></>;
+        <p className="mt-2 text-[11px] text-amber-700">{platformCurves[x.code]?.length>=2?"基金平台分时估值":"本设备采样"}：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。平台没有提供的时段留空。</p></>;
       })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">尚无足够的有效盘中采样。网页打开前的历史分钟估值未被记录，不能自行补造。</p>}</div>
       {x.stocks.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer text-slate-600">披露重仓股 · 覆盖 {x.coverage??"—"}%</summary><div className="mt-2 space-y-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between gap-2"><span>{s.name} {s.code}</span><span>{s.weight.toFixed(2)}% · {signed(s.change)}</span></div>)}</div></details>}
       {issues[x.code]&&<details className="mt-3 text-xs text-amber-700"><summary className="cursor-pointer">盘中估算暂不可用 · 查看原因</summary><p className="mt-2">{issues[x.code]}</p></details>}
