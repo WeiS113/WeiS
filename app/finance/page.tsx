@@ -335,25 +335,25 @@ export default function FinancePage() {
         </div>
         <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-2">
-            <input aria-label="快速添加基金" inputMode="search" placeholder="搜索基金名称 / 输入6位基金代码" value={input} onChange={e=>{setType("fund");setInput(e.target.value)}} onKeyDown={e=>{if(e.key==="Enter"){setType("fund");addResult({code:input.trim(),kind:"fund"});}}} className="min-w-0 flex-1 rounded-xl bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/>
-            <button type="button" onClick={()=>{setType("fund");if(/^\\d{6}$/.test(input.trim()))addResult({code:input.trim(),kind:"fund"});else setView("watchlist")}} className="shrink-0 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">＋ 添加</button>
+            <input aria-label="快速添加基金" inputMode="search" placeholder="搜索基金名称 / 输入6位基金代码" value={input} onChange={e=>{setType("fund");setInput(e.target.value)}} onKeyDown={e=>{if(e.key==="Enter" && /^\d{6}$/.test(input.trim())){setType("fund");addResult({code:input.trim(),kind:"fund"});}}} className="min-w-0 flex-1 rounded-xl bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/>
+            <button type="button" onClick={()=>{setType("fund");if(/^\d{6}$/.test(input.trim()))addResult({code:input.trim(),kind:"fund"});else setView("watchlist")}} className="shrink-0 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">＋ 添加</button>
           </div>
           {input.trim().length >= 2 && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-slate-100">{searchBusy?<p className="px-3 py-2 text-xs text-slate-400">搜索中…</p>:matches.filter(x=>x.kind==="fund").slice(0,7).map(m=><button key={m.code} type="button" onClick={()=>addResult({code:m.code,kind:"fund"})} className="flex w-full justify-between border-b border-slate-50 px-3 py-2 text-left text-sm"><span>{m.name}</span><span className="text-slate-400">{m.code} ＋</span></button>)}</div>}
         </div>
-        <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+        <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><h2 className="text-lg font-semibold">基金盯盘 · 今日预估涨跌</h2><p className="mt-1 text-xs text-slate-500">非官方净值，仅统计能获取估算且已录入份额的基金</p></div>
-            <span className="text-xs text-slate-500">覆盖 {estimated.length}/{covered.length} 只</span>
+            <div><h2 className="text-lg font-semibold">今日基金盯盘</h2><p className="mt-1 text-xs text-slate-500">盘中估值持续更新 · 估值仅供参考</p></div>
+            <span className="text-xs text-slate-500">估值覆盖 {items.filter(x=>x.kind==="fund"&&estimates[x.code]?.change!=null).length}/{items.filter(x=>x.kind==="fund").length} 只</span>
           </div>
-          <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"暂无盘中估算"}</p>
-          <p className="mt-1 text-xs text-slate-400">{estimated.length?"估算当日变化金额（不含手续费、申赎与分红）":"当前数据源未返回可计算的基金盘中估算，不能以已公布净值冒充"}</p>
+          <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"—"}</p>
+          <p className="mt-1 text-xs text-slate-400">{estimated.length?"已录入份额基金的估算当日收益":"尚未获得可计算收益的持仓；下方仍可查看单只基金估算涨跌"}</p>
           <p className="mt-2 text-xs text-slate-400">盘中走势从你打开本页面后开始记录，历史数据不会被虚构或回填。</p>
           <div className="mt-4 divide-y divide-slate-100">
             {items.filter(x=>x.kind==="fund").map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
               const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&(h?.quantity??0)>0;
               const delta=hasEstimate?h!.quantity*(e!.estimatedNav!-q!.price!):null;
-              return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {e?.source||"尚无估算源"} · 估算时间 {e?.time||"未提供"}{e?.coverage!=null?" · 披露持仓覆盖 "+e.coverage.toFixed(1)+"%":""}{e?.disclosure?" · 披露截止 "+e.disclosure:""}</p></div>
                 {(() => {
                   const points = estimateSeries[item.code] || [];
