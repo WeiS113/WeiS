@@ -26,7 +26,7 @@ async function publicHistory(code: string): Promise<Point[]> {
   return rows.slice(-120).map((v:unknown)=>{
     const row = v as {x?:unknown;y?:unknown};
     const millis = Number(row?.x);
-    const date = Number.isFinite(millis) && millis > 1e11 ? new Date(millis).toISOString().slice(0,10) : "";
+    const date = Number.isFinite(millis) && millis > 1e11 ? new Date(millis).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"}) : "";
     return { date, close: Number(row?.y) };
   });
 }
