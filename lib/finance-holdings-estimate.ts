@@ -15,6 +15,8 @@ export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|
   const h=await holdRes.json(),n=await navRes.json();
   const nav=num(n?.Datas?.DWJZ);
   if(nav===null||nav<=0)return null;
+  const typeText=String(n?.Datas?.FTYPE??n?.Datas?.FUNDTYPE??"");
+  if(/债券|货币|QDII|海外|商品|黄金|FOF|养老/.test(typeText))return null;
   const stocks=h?.Datas?.fundStocks;
   if(!Array.isArray(stocks)||stocks.length<3)return null;
   const valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??""),name:String(x.GPJC??""),weight:num(x.JZBL)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
@@ -22,13 +24,17 @@ export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|
   const quotes=await Promise.all(valid.map(async (x:{code:string;name:string;weight:number})=>{
     try{
       const market=/^[569]/.test(x.code)?1:0;
-      const u="https://push2.eastmoney.com/api/qt/stock/get?secid="+market+"."+x.code+"&fltt=2&fields=f57,f170";
+      const u="https://push2.eastmoney.com/api/qt/stock/get?secid="+market+"."+x.code+"&fltt=2&fields=f57,f170,f86";
       const res=await fetch(u,{headers:domesticHeaders,signal:AbortSignal.timeout(4500),cache:"no-store"});
       if(!res.ok)return null;
       const data=(await res.json())?.data;
       if(String(data?.f57)!==x.code)return null;
       const change=num(data.f170);
-      if(change===null||Math.abs(change)>25)return null;
+      const quoteSeconds=num(data.f86);
+      if(change===null||Math.abs(change)>25||quoteSeconds===null||quoteSeconds<1e9)return null;
+      const quoteDate=new Date(quoteSeconds*1000).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+      const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+      if(quoteDate!==today)return null;
       return {code:x.code,name:x.name,weight:x.weight,change};
     }catch{return null;}
   }));
@@ -36,9 +42,9 @@ export async function estimateFromHoldings(code:string):Promise<HoldingEstimate|
   const coverage=received.reduce((sum,x)=>sum+x.weight,0);
   // Less than 30% of fund NAV is too little for a useful fallback estimate.
   if(received.length<3||coverage<30||coverage>100)return null;
-  const change=received.reduce((sum,x)=>sum+x.weight*x.change,0)/coverage;
-  // The return is a proxy for disclosed equity holdings, NOT an actual whole-fund return.
+  const change=received.reduce((sum,x)=>sum+x.weight*x.change,0)/100;
+  // Undisclosed positions contribute zero in this conservative partial proxy; not an actual whole-fund return.
   if(!Number.isFinite(change)||Math.abs(change)>20)return null;
-  return {code,estimatedNav:nav*(1+change/100),change,time:new Date().toLocaleString("sv-SE",{timeZone:"Asia/Shanghai"}),source:"重仓股加权推算（非官方；按已披露股票归一化）",coverage:Math.round(coverage*100)/100,disclosure:typeof h.Expansion==="string"?h.Expansion:null,stocks:received};
+  return {code,estimatedNav:nav*(1+change/100),change,time:new Date().toLocaleString("sv-SE",{timeZone:"Asia/Shanghai"}),source:"重仓股已知部分贡献估算（非完整基金收益）",coverage:Math.round(coverage*100)/100,disclosure:typeof h.Expansion==="string"?h.Expansion:null,stocks:received};
  }catch{return null;}
 }
