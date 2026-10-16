@@ -22,6 +22,7 @@ export default function FinancePage() {
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
   const [estimateSeries, setEstimateSeries] = useState<Record<string, EstimatePoint[]>>({});
+  const estimateSourceTimes = useRef<Record<string, string>>({});
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
   const [holdingReady, setHoldingReady] = useState(false);
   const [input, setInput] = useState("");
@@ -143,10 +144,14 @@ export default function FinancePage() {
             const today = new Date(now).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
             const next = { ...previous };
             for (const x of values) {
-              if (x.change === null || !Number.isFinite(x.change) || !x.time) continue;
+              if (x.change === null || !Number.isFinite(x.change) || !x.time || x.estimatedNav === null) continue;
               const prior = (next[x.code] || []).filter(p => new Date(p.at).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"}) === today);
               const latest = prior[prior.length-1];
-              if (latest && now-latest.at < 45000) continue;
+              // Do not add a fake data point when the upstream price/time has not changed.
+              const signature = x.time + ":" + x.estimatedNav + ":" + x.change;
+              if (estimateSourceTimes.current[x.code] === signature) continue;
+              estimateSourceTimes.current[x.code] = signature;
+              if (latest && Math.abs(latest.change - x.change) < 0.000001 && now-latest.at < 5*60000) continue;
               next[x.code] = [...prior, {at:now,change:x.change}].slice(-120);
             }
             try { localStorage.setItem("weis-finance-estimate-series-v1", JSON.stringify(next)); } catch { /* storage disabled */ }
