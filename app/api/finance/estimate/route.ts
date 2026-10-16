@@ -25,8 +25,10 @@ export async function GET(request:NextRequest){
       const change=toNum(obj.GSZZL);
       const time=typeof obj.GZTIME==="string"&&obj.GZTIME.length<=32?obj.GZTIME:null;
       const data:Estimate={code,estimatedNav:nav!==null&&nav>0?nav:null,change,time,source:"第三方盘中估算（非官方净值）"};
-      return NextResponse.json(data,{headers:{"Cache-Control":"no-store"}});
+      if (data.estimatedNav !== null && data.change !== null && data.time) return NextResponse.json(data,{headers:{"Cache-Control":"no-store"}});
+      // The primary host can return a valid fund record with empty estimate fields.
+      // Continue to the alternative host instead of incorrectly treating this as success.
     }catch{ /* try fallback */ }
   }
-  return NextResponse.json({code,estimatedNav:null,change:null,time:null,source:"暂未取得可验证的盘中估算"},{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({code,estimatedNav:null,change:null,time:null,source:"数据源未提供该基金的盘中估算；部分主动基金不支持"},{headers:{"Cache-Control":"no-store"}});
 }
