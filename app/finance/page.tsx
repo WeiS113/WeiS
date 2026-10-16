@@ -131,7 +131,7 @@ export default function FinancePage() {
         return await response.json() as Quote;
       }));
       if (requestId !== refreshId.current) return;
-      setQuotes(Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q])));
+      setQuotes(previous => ({...previous,...Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q]))}));
       setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
       setMessage(data.some(q => !q) ? "部分行情获取失败，请稍后重试。" : "");
     } catch { if (requestId === refreshId.current) { setQuotes({}); setMessage("行情服务暂不可用。"); } }
@@ -151,7 +151,7 @@ export default function FinancePage() {
         const data = await response.json() as { estimates: (Estimate & {code:string})[] };
         if (!cancelled) {
           const values = Array.isArray(data.estimates) ? data.estimates : [];
-          setEstimates(Object.fromEntries(values.map(x => [x.code,x])));
+          setEstimates(previous => ({...previous,...Object.fromEntries(values.map(x => [x.code, (x.estimatedNav == null && previous[x.code]?.estimatedNav != null) ? {...previous[x.code],source:"上一笔有效估值（当前请求无数据）"} : x]))}));
           setEstimateSeries(previous => {
             const now = Date.now();
             const today = new Date(now).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
@@ -172,7 +172,7 @@ export default function FinancePage() {
           });
         }
       } catch {
-        if (!cancelled) setEstimates(Object.fromEntries(funds.map(x=>[x.code,{estimatedNav:null,change:null,time:null,source:"估算接口暂不可用"}])));
+        if (!cancelled) setEstimates(previous => Object.fromEntries(funds.map(x=>[x.code, previous[x.code]?.estimatedNav != null ? {...previous[x.code],source:"上一笔有效估值（当前请求失败）"} : {estimatedNav:null,change:null,time:null,source:"估算接口暂不可用"}])));
       }
     }
     void fetchEstimates();
