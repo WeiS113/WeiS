@@ -10,7 +10,7 @@ function parseMoney(s:string){const m=s.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*�
 function extract(s:string,funds:Fund[]){
  const text=s.replace(/\s+/g,"").replace(/[，。！]/g,"");
  const verb=text.match(/买入|申购|加仓|卖出|赎回|减仓/);if(!verb)return null;
- const side:/buy|sell/ extends never?never:"buy"|"sell"=/买入|申购|加仓/.test(verb[0])?"buy":"sell";
+ const side:"buy"|"sell"=/买入|申购|加仓/.test(verb[0])?"buy":"sell";
  const after=text.slice((verb.index??0)+verb[0].length);
  const amountMatch=after.match(/(\d+(?:\.\d+)?)\s*(万|千)?\s*元?/);
  if(!amountMatch)return null;
