@@ -28,11 +28,19 @@ async function mobile(code:string):Promise<Point[]>{
  if(!res.ok)throw Error("mobile unavailable");
  const json=await res.json();
  const rows=Array.isArray(json?.Datas)?json.Datas:[];
+ const expansion=json?.Expansion??{};
+ const base=Number(expansion.DWJZ);
+ const rawDate=String(expansion.GZTIME??"").replaceAll("/","-").slice(0,10);
+ if(!Number.isFinite(base)||base<=0||rawDate!==localDate(Date.now()))return [];
  const parsed=rows.map((s:unknown)=>{
   if(typeof s!=="string")return null;
-  const fields=s.split(",");if(fields.length<3)return null;
-  const stamp=Date.parse(fields[0].replaceAll("/","-")+"T"+fields[1]+"+08:00");
-  return {x:stamp,y:Number(fields[2])};
+  // FundVarietieValuationDetail rows are "sequence,HH:mm,changePercent",
+  // not "date,time,NAV". Convert percent with the separately published DWJZ.
+  const fields=s.split(",").map(x=>x.trim());
+  if(fields.length<3||!/^\d{1,2}:\d{2}/.test(fields[1]))return null;
+  const stamp=Date.parse(rawDate+"T"+fields[1].slice(0,5)+":00+08:00");
+  const pct=Number(fields[2]);
+  return Number.isFinite(pct)?{x:stamp,y:base*(1+pct/100)}:null;
  }).filter(Boolean);
  return normalize(parsed,code);
 }
