@@ -62,7 +62,7 @@ export default function FinancePage() {
         if (!response.ok) return null;
         return await response.json() as Quote;
       }));
-      setQuotes(old => ({ ...old, ...Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q])) }));
+      setQuotes(Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q])));
       setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
       setMessage(data.some(q => !q) ? "部分行情获取失败，请稍后重试。" : "");
     } catch { setMessage("行情服务暂不可用。"); }
