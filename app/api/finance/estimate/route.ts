@@ -42,22 +42,22 @@ export async function GET(request:NextRequest){
  }));
  const candidates=new Map<string,Estimate[]>();
  for(const code of codes)candidates.set(code,responses.map(r=>r.get(code)).filter((e):e is Estimate=>Boolean(e&&e.estimatedNav!==null&&e.change!==null&&e.time)));
- const classify=async(code:string):Promise<string>=>{
+ const classify=async(code:string,nameHint=""):Promise<string>=>{
   try{
    const url="https://fundmobapi.eastmoney.com/FundMNewApi/FundMNDetailInformation?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0";
    const r=await fetch(url,{next:{revalidate:3600},signal:AbortSignal.timeout(4500)});
-   if(!r.ok)return "unknown";
+   if(!r.ok)throw Error("classification lookup failed");
    const d=(await r.json())?.Datas;
-   const text=String(d?.FTYPE??d?.FUNDTYPE??"");
+   const text=[d?.FTYPE,d?.FUNDTYPE,d?.SHORTNAME,d?.NAME,nameHint].filter(Boolean).join(" ");
    if(/货币/.test(text))return "money";
    if(/QDII|海外/.test(text))return "overseas";
    if(/债券|可转债/.test(text))return "bond";
    if(/联接|指数|ETF/.test(text))return "index";
    if(/股票|混合/.test(text))return "equity";
    return "unknown";
-  }catch{return "unknown";}
+  }catch{if(/货币/.test(nameHint))return "money";if(/QDII|海外/.test(nameHint))return "overseas";if(/债券|可转债/.test(nameHint))return "bond";if(/联接|指数|ETF/.test(nameHint))return "index";if(/混合|股票/.test(nameHint))return "equity";return "unknown";}
  };
- const types=await Promise.all(codes.map(async code=>({code,type:await classify(code)})));
+ const types=await Promise.all(codes.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
  const knownType=new Map(types.map(x=>[x.code,x.type]));
  const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&knownType.get(code)==="equity").slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
