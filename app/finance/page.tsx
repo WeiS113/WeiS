@@ -333,21 +333,13 @@ export default function FinancePage() {
           <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">基金盘中估值 · 实时动态 · 预估收益</p></div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
         </div>
-        <section className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已录入持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalCost)}</p></div>
-          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{hasQuotedPositions ? money(totalMarket) : "—"}</p></div>
-          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
-        </section>
-        {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
-        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">持仓组合分析</h2><span className="text-xs text-slate-500">报价覆盖 {pricedPositions.length}/{heldPositions.length} · {heldPositions.length ? quoteCoverage + "%" : "无持仓"}</span></div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div><p className="text-xs text-slate-500">已报价持仓浮动收益率</p><p className={`mt-1 text-2xl font-semibold tabular-nums ${knownProfit >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{knownProfitRate === null ? "—" : (knownProfitRate >= 0 ? "+" : "") + knownProfitRate.toFixed(2) + "%"}</p><p className="mt-1 text-xs text-slate-400">仅按已获取报价的资产计算</p></div>
-            <div><p className="text-xs text-slate-500">已报价资产分布</p><div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">{assetBreakdown.map((part,i)=><div key={part.label} className={i===0?"bg-sky-500":"bg-amber-400"} style={{width:knownValue>0?part.value/knownValue*100+"%":"0%"}} />)}</div><div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">{assetBreakdown.map((part,i)=><span key={part.label}>{i===0?"●":"◆"} {part.label} {knownValue>0?(part.value/knownValue*100).toFixed(1)+"%":"—"}</span>)}</div></div>
+        <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <input aria-label="快速添加基金" inputMode="search" placeholder="搜索基金名称 / 输入6位基金代码" value={input} onChange={e=>{setType("fund");setInput(e.target.value)}} onKeyDown={e=>{if(e.key==="Enter"){setType("fund");addResult({code:input.trim(),kind:"fund"});}}} className="min-w-0 flex-1 rounded-xl bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/>
+            <button type="button" onClick={()=>{setType("fund");if(/^\\d{6}$/.test(input.trim()))addResult({code:input.trim(),kind:"fund"});else setView("watchlist")}} className="shrink-0 rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">＋ 添加</button>
           </div>
-        </section>
-
-        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
+          {input.trim().length >= 2 && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-slate-100">{searchBusy?<p className="px-3 py-2 text-xs text-slate-400">搜索中…</p>:matches.filter(x=>x.kind==="fund").slice(0,7).map(m=><button key={m.code} type="button" onClick={()=>addResult({code:m.code,kind:"fund"})} className="flex w-full justify-between border-b border-slate-50 px-3 py-2 text-left text-sm"><span>{m.name}</span><span className="text-slate-400">{m.code} ＋</span></button>)}</div>}
+        </div>
         <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div><h2 className="text-lg font-semibold">基金盯盘 · 今日预估涨跌</h2><p className="mt-1 text-xs text-slate-500">非官方净值，仅统计能获取估算且已录入份额的基金</p></div>
@@ -382,7 +374,22 @@ export default function FinancePage() {
           <button type="button" onClick={()=>void refresh()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-50">刷新净值</button>
           <span className="text-xs text-slate-500">估值约每60秒更新 · 非实时成交价</span>
         </div>
-        <FinanceIndices />
+        {heldPositions.length > 0 && <div className="mt-7">        <section className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已录入持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalCost)}</p></div>
+          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{hasQuotedPositions ? money(totalMarket) : "—"}</p></div>
+          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
+        </section>
+        {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">持仓组合分析</h2><span className="text-xs text-slate-500">报价覆盖 {pricedPositions.length}/{heldPositions.length} · {heldPositions.length ? quoteCoverage + "%" : "无持仓"}</span></div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div><p className="text-xs text-slate-500">已报价持仓浮动收益率</p><p className={`mt-1 text-2xl font-semibold tabular-nums ${knownProfit >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{knownProfitRate === null ? "—" : (knownProfitRate >= 0 ? "+" : "") + knownProfitRate.toFixed(2) + "%"}</p><p className="mt-1 text-xs text-slate-400">仅按已获取报价的资产计算</p></div>
+            <div><p className="text-xs text-slate-500">已报价资产分布</p><div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">{assetBreakdown.map((part,i)=><div key={part.label} className={i===0?"bg-sky-500":"bg-amber-400"} style={{width:knownValue>0?part.value/knownValue*100+"%":"0%"}} />)}</div><div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">{assetBreakdown.map((part,i)=><span key={part.label}>{i===0?"●":"◆"} {part.label} {knownValue>0?(part.value/knownValue*100).toFixed(1)+"%":"—"}</span>)}</div></div>
+          </div>
+        </section>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
+        </div>}
         <nav aria-label="Finance 页面分类" className="mt-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
           {([{ id: "holdings", text: "我的持仓" }, { id: "watchlist", text: "自选与搜索" }, { id: "settings", text: "导入与同步" }] as const).map(tab => <button key={tab.id} type="button" onClick={() => setView(tab.id)} className={`whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-medium ${view === tab.id ? "bg-slate-900 text-white" : "bg-white/80 text-slate-600"}`}>{tab.text}</button>)}
         </nav>
@@ -447,6 +454,7 @@ export default function FinancePage() {
           </div>}
         </section>
         </>}
+        <FinanceIndices />
         <p className="mt-6 text-xs leading-6 text-slate-400">行情仅供个人参考，不构成投资建议。A股和ETF报价可能延迟；场外基金展示最近公布的官方净值及对应日涨跌，不属于盘中实时估值。第三方接口可能限流或中断，自选和成本数据暂保存在当前浏览器中；当前盈亏未计手续费、分红及税费。</p>
       </div>
     </main>
