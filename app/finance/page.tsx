@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../components/FinanceHistory";
+import FinanceImageImport, { type Recognized } from "../../components/FinanceImageImport";
 import { supabase } from "../../lib/supabase";
 
 type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
@@ -216,6 +217,19 @@ export default function FinancePage() {
     } catch (error) { setSyncMessage(error instanceof Error ? error.message : "导入失败"); }
   }
 
+  function importRecognized(rows: Recognized[]) {
+    const nextItems = [...items];
+    const nextHoldings = { ...holdings };
+    for (const row of rows) {
+      if (!Number.isFinite(row.quantity) || !Number.isFinite(row.cost) || row.quantity === null || row.cost === null || row.quantity < 0 || row.cost < 0) continue;
+      const key = row.kind + row.code;
+      if (!nextItems.some(x => x.kind + x.code === key)) nextItems.push({ kind: row.kind, code: row.code });
+      nextHoldings[key] = { quantity: row.quantity, cost: row.cost };
+    }
+    setItems(nextItems); setHoldings(nextHoldings);
+    localStorage.setItem(KEY, JSON.stringify(nextItems));
+    localStorage.setItem(HOLDINGS_KEY, JSON.stringify(nextHoldings));
+  }
   function updateItems(next: Saved[]) { setItems(next); localStorage.setItem(KEY, JSON.stringify(next)); }
   function addResult(result: Saved) {
     if (items.some(x => x.code === result.code && x.kind === result.kind)) { setMessage("已在自选列表中"); return; }
@@ -269,6 +283,7 @@ export default function FinancePage() {
           <p className="mt-3 text-xs text-slate-400">可按名称或代码搜索并选择结果，也可输入6位代码后直接添加；搜索结果来自第三方接口。</p>
           {message && <p role="status" className="mt-3 text-sm text-amber-700">{message}</p>}
         </section>
+        <FinanceImageImport onImport={importRecognized} />
         <section className="mt-6 overflow-hidden rounded-[28px] border border-white/90 bg-white/75 shadow-sm backdrop-blur-xl">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">我的自选 <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
           {items.length === 0 ? <p className="p-8 text-center text-slate-400">还没有自选，输入代码添加</p> : <div className="divide-y divide-slate-100">
