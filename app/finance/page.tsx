@@ -100,7 +100,7 @@ export default function FinancePage() {
     const quote = estimates[x.code];
     const nav = quote?.estimatedNav;
     const change = quote?.change;
-    if (!h || h.quantity <= 0 || nav == null || change == null || !Number.isFinite(nav) || nav <= 0 || !Number.isFinite(change) || change <= -99) return null;
+    if (!h || quote?.source?.includes("上一笔") || h.quantity <= 0 || nav == null || change == null || !Number.isFinite(nav) || nav <= 0 || !Number.isFinite(change) || change <= -99) return null;
     // Today's estimated gain must use the estimate's own reference NAV;
     // the latest official NAV endpoint may fail or lag independently.
     const referenceNav = nav / (1 + change / 100);
@@ -356,7 +356,7 @@ export default function FinancePage() {
         <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div><h2 className="text-lg font-semibold">今日基金盯盘</h2><p className="mt-1 text-xs text-slate-500">盘中估值持续更新 · 估值仅供参考</p></div>
-            <span className="text-xs text-slate-500">估值覆盖 {items.filter(x=>x.kind==="fund"&&estimates[x.code]?.change!=null).length}/{items.filter(x=>x.kind==="fund").length} 只</span>
+            <span className="text-xs text-slate-500">估值覆盖 {items.filter(x=>x.kind==="fund"&&estimates[x.code]?.change!=null&&!estimates[x.code]?.source?.includes("上一笔")).length}/{items.filter(x=>x.kind==="fund").length} 只</span>
           </div>
           <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"—"}</p>
           <p className="mt-1 text-xs text-slate-400">{estimated.length?"已录入份额基金的估算当日收益":"尚未获得可计算收益的持仓；下方仍可查看单只基金估算涨跌"}</p>
@@ -374,7 +374,7 @@ export default function FinancePage() {
           <div className="mt-2 divide-y divide-slate-100">
             {items.filter(x=>x.kind==="fund"&&(activeGroup==="全部"||(activeGroup==="未分组"?!fundGroups[x.code]:fundGroups[x.code]===activeGroup))).sort((a,b)=>fundSort==="original"?0:fundSort==="gain"?(estimates[b.code]?.change??-Infinity)-(estimates[a.code]?.change??-Infinity):(estimates[a.code]?.change??Infinity)-(estimates[b.code]?.change??Infinity)).map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
-              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&e.change!=null&&e.change>-99&&(h?.quantity??0)>0;
+              const hasEstimate=!e?.source?.includes("上一笔")&&e?.estimatedNav!=null&&e.estimatedNav>0&&e.change!=null&&e.change>-99&&(h?.quantity??0)>0;
               const delta=hasEstimate?h!.quantity*e!.estimatedNav!*e!.change!/(100+e!.change!):null;
               return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <div><p className="text-sm font-medium">{q?.name||e?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {e?.source||"尚无估算源"} · 估算时间 {e?.time||"未提供"}{e?.coverage!=null?" · 披露持仓覆盖 "+e.coverage.toFixed(1)+"%":""}{e?.disclosure?" · 披露截止 "+e.disclosure:""}</p></div>
