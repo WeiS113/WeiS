@@ -6,7 +6,7 @@ function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
  if(Array.isArray(value))return value.flatMap(x=>records(x,depth+1));
  const obj=value as Record<string,unknown>;
- if(typeof obj.FCODE==="string")return [obj];
+ if(typeof obj.FCODE==="string" || typeof obj.FCODE==="number")return [obj];
  return Object.values(obj).flatMap(x=>records(x,depth+1));
 }
 async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
@@ -18,7 +18,7 @@ async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
   const code=String(x.FCODE);
   if(!codes.includes(code))continue;
   const n=numeric(x.GSZ),percent=numeric(x.GSZZL),time=typeof x.GZTIME==="string"&&x.GZTIME.length<=32?x.GZTIME:null;
-  result.set(code,{code,estimatedNav:n!==null&&n>0?n:null,change:percent,time,source:"天天基金盘中估算（非官方净值）"});
+  result.set(code,{code,estimatedNav:n!==null&&n>0&&n<10000?n:null,change:percent!==null&&Math.abs(percent)<=100?percent:null,time,source:"天天基金盘中估算（非官方净值）"});
  }
  return result;
 }
