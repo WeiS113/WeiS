@@ -194,13 +194,13 @@ export default function FinancePage() {
       for (const raw of backup.watchlist) {
         if (!raw || typeof raw !== "object") throw new Error("无效的自选记录");
         const entry = raw as Record<string, unknown>;
-        if ((entry.kind !== "stock" && entry.kind !== "fund") || typeof entry.code !== "string" || !/^\\d{6}$/.test(entry.code)) throw new Error("无效的证券代码");
+        if ((entry.kind !== "stock" && entry.kind !== "fund") || typeof entry.code !== "string" || !/^\d{6}$/.test(entry.code)) throw new Error("无效的证券代码");
         const key = entry.kind + entry.code;
         if (!seen.has(key)) { restored.push({ code: entry.code, kind: entry.kind }); seen.add(key); }
       }
       const nextHoldings: Record<string, Holding> = {};
       for (const [key, value] of Object.entries(backup.holdings as Record<string, unknown>)) {
-        if (!/^(stock|fund)\\d{6}$/.test(key) || !value || typeof value !== "object") throw new Error("无效的持仓记录");
+        if (!/^(stock|fund)\d{6}$/.test(key) || !value || typeof value !== "object") throw new Error("无效的持仓记录");
         const data = value as Record<string, unknown>;
         if (typeof data.quantity !== "number" || typeof data.cost !== "number" || !Number.isFinite(data.quantity) || !Number.isFinite(data.cost) || data.quantity < 0 || data.cost < 0) throw new Error("持仓数量或成本无效");
         if (seen.has(key)) nextHoldings[key] = { quantity: data.quantity, cost: data.cost };
