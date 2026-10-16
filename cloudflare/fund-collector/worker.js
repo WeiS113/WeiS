@@ -22,7 +22,8 @@ async function collect(env){
  if(!portfolios.ok)throw Error("Cannot load watchlists: "+portfolios.status);
  const data=await portfolios.json();
  const codes=[...new Set(data.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))].slice(0,120);
- for(const code of codes){
+ for(let i=0;i<codes.length;i+=5){
+  await Promise.all(codes.slice(i,i+5).map(async code=>{
   try{
    const url=new URL("/api/finance/estimate",env.WEIS_SITE_URL);
    url.searchParams.set("code",code);
@@ -38,5 +39,6 @@ async function collect(env){
    const saved=await fetch(api+"/finance_intraday_points?on_conflict=code,at,model",{method:"POST",headers:{...headers,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)});
    if(!saved.ok)throw Error("Supabase insert "+saved.status);
   }catch(err){console.error("collect failed",code,String(err));}
+  }));
  }
 }
