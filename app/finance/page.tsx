@@ -59,6 +59,7 @@ export default function FinancePage() {
   const totalMarket = pricedPositions.reduce((sum, p) => sum + (p.market ?? 0), 0);
   const knownCost = pricedPositions.reduce((sum, p) => sum + p.invested, 0);
   const hasMissingPrice = positions.some(p => p.quantity > 0 && p.market === null);
+  const hasQuotedPositions = pricedPositions.length > 0;
   const money = (x: number) => "¥" + x.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const refresh = useCallback(async () => {
@@ -73,7 +74,7 @@ export default function FinancePage() {
       setQuotes(Object.fromEntries(data.filter((q): q is Quote => q !== null).map(q => [q.kind + q.code, q])));
       setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
       setMessage(data.some(q => !q) ? "部分行情获取失败，请稍后重试。" : "");
-    } catch { setMessage("行情服务暂不可用。"); }
+    } catch { setQuotes({}); setMessage("行情服务暂不可用。"); }
     finally { setLoading(false); }
   }, [items]);
 
@@ -198,8 +199,8 @@ export default function FinancePage() {
         </section>
         <section className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已录入持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalCost)}</p></div>
-          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalMarket)}</p></div>
-          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(totalMarket - knownCost)}</p></div>
+          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{hasQuotedPositions ? money(totalMarket) : "—"}</p></div>
+          <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
         </section>
         {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
         <section className="mt-5 rounded-[28px] border border-white/90 bg-white/75 p-5 shadow-sm backdrop-blur-xl sm:p-7">
