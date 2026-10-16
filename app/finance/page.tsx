@@ -38,6 +38,7 @@ export default function FinancePage() {
   const [chartCode, setChartCode] = useState<string | null>(null);
   const [fundSort, setFundSort] = useState<"original"|"gain"|"loss">("original");
   const [fundGroups, setFundGroups] = useState<Record<string,string>>({});
+  const [groupNames, setGroupNames] = useState<string[]>([]);
   const [activeGroup, setActiveGroup] = useState("全部");
   const [view, setView] = useState<"holdings" | "watchlist" | "settings">("holdings");
   const refreshId = useRef(0);
@@ -57,7 +58,7 @@ export default function FinancePage() {
   }, []);
 
   useEffect(() => {
-    try { const value = JSON.parse(localStorage.getItem(GROUPS_KEY) || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) setFundGroups(value); } catch { /* ignore bad group cache */ }
+    try { const value = JSON.parse(localStorage.getItem(GROUPS_KEY) || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) { setFundGroups(value.assignments && typeof value.assignments === "object" ? value.assignments : value); if(Array.isArray(value.names)) setGroupNames(value.names.filter((x:unknown)=>typeof x==="string").slice(0,40)); } } catch { /* ignore bad group cache */ }
   }, []);
 
   useEffect(() => {
@@ -357,12 +358,12 @@ export default function FinancePage() {
           <p className="mt-1 text-xs text-slate-400">{estimated.length?"已录入份额基金的估算当日收益":"尚未获得可计算收益的持仓；下方仍可查看单只基金估算涨跌"}</p>
           <p className="mt-2 text-xs text-slate-400">盘中走势从你打开本页面后开始记录，历史数据不会被虚构或回填。</p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {["全部","未分组",...Array.from(new Set(Object.values(fundGroups).filter(Boolean)))].map(group=><button key={group} type="button" onClick={()=>setActiveGroup(group)} className={`rounded-full px-3 py-1.5 text-xs ${activeGroup===group?"bg-slate-900 font-semibold text-white":"bg-slate-100 text-slate-600"}`}>{group}</button>)}
+            {["全部","未分组",...Array.from(new Set([...groupNames,...Object.values(fundGroups).filter(Boolean)]))].map(group=><button key={group} type="button" onClick={()=>setActiveGroup(group)} className={`rounded-full px-3 py-1.5 text-xs ${activeGroup===group?"bg-slate-900 font-semibold text-white":"bg-slate-100 text-slate-600"}`}>{group}</button>)}
             <button type="button" onClick={()=>{
               const name=window.prompt("新分组名称（例如：科技、宽基、医药）")?.trim();
               if(!name||name.length>20)return;
-              setActiveGroup(name);
-              setFundGroups(current=>{const next={...current};try{localStorage.setItem(GROUPS_KEY,JSON.stringify(next));}catch{}return next;});
+              const names=Array.from(new Set([...groupNames,name]));setGroupNames(names);setActiveGroup(name);
+              try{localStorage.setItem(GROUPS_KEY,JSON.stringify({assignments:fundGroups,names}));}catch{}
             }} className="rounded-full border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500">＋ 新建分组</button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-slate-500">排序</span>{([{id:"original",name:"自选顺序"},{id:"gain",name:"涨幅优先"},{id:"loss",name:"跌幅优先"}] as const).map(s=><button type="button" key={s.id} onClick={()=>setFundSort(s.id)} className={`rounded-full px-3 py-1.5 ${fundSort===s.id?"bg-rose-50 font-semibold text-rose-700":"bg-slate-50 text-slate-500"}`}>{s.name}</button>)}</div>
@@ -383,7 +384,7 @@ export default function FinancePage() {
                   return <svg viewBox="0 0 100 42" role="img" aria-label={item.code+" 今日估算涨跌动态，"+points.length+"个采样点"} className="h-11 w-24"><path d={path} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
                 })()}
                 <div className="min-w-[112px] text-right"><p className={`text-xl font-bold tabular-nums ${e?.change==null?"text-slate-400":e.change>=0?"text-rose-600":"text-emerald-600"}`}>{e?.change==null?"暂无估值":(e.change>0?"+":"")+e.change.toFixed(2)+"%"}</p><p className="mt-1 text-xs text-slate-500">估值 {e?.estimatedNav==null?"—":e.estimatedNav.toFixed(4)}</p><p className={`mt-1 text-xs font-semibold ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"未录入份额":("预估 "+(delta>=0?"+":"")+money(delta))}</p></div>
-                <div className="basis-full flex items-center gap-2 text-xs text-slate-500"><label htmlFor={"fund-group-"+item.code}>分组</label><select id={"fund-group-"+item.code} value={fundGroups[item.code]||""} onChange={event=>{const name=event.target.value;setFundGroups(prev=>{const next={...prev};if(name)next[item.code]=name;else delete next[item.code];try{localStorage.setItem(GROUPS_KEY,JSON.stringify(next));}catch{}return next;});}} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"><option value="">未分组</option>{Array.from(new Set([...Object.values(fundGroups).filter(Boolean),...(activeGroup!=="全部"&&activeGroup!=="未分组"?[activeGroup]:[])])).map(name=><option key={name} value={name}>{name}</option>)}</select><button type="button" onClick={()=>{const name=window.prompt("将这只基金加入哪个分组？")?.trim();if(!name||name.length>20)return;setFundGroups(prev=>{const next={...prev,[item.code]:name};try{localStorage.setItem(GROUPS_KEY,JSON.stringify(next));}catch{}return next;});}} className="text-rose-600">新分组并移动</button></div>
+                <div className="basis-full flex items-center gap-2 text-xs text-slate-500"><label htmlFor={"fund-group-"+item.code}>分组</label><select id={"fund-group-"+item.code} value={fundGroups[item.code]||""} onChange={event=>{const name=event.target.value;setFundGroups(prev=>{const next={...prev};if(name)next[item.code]=name;else delete next[item.code];try{localStorage.setItem(GROUPS_KEY,JSON.stringify({assignments:next,names:groupNames}));}catch{}return next;});}} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"><option value="">未分组</option>{Array.from(new Set([...groupNames,...Object.values(fundGroups).filter(Boolean),...(activeGroup!=="全部"&&activeGroup!=="未分组"?[activeGroup]:[])])).map(name=><option key={name} value={name}>{name}</option>)}</select><button type="button" onClick={()=>{const name=window.prompt("将这只基金加入哪个分组？")?.trim();if(!name||name.length>20)return;setFundGroups(prev=>{const next={...prev,[item.code]:name};try{localStorage.setItem(GROUPS_KEY,JSON.stringify(next));}catch{}return next;});}} className="text-rose-600">新分组并移动</button></div>
                 <button type="button" onClick={()=>setChartCode(chartCode==="fund"+item.code?null:"fund"+item.code)} className="basis-full rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-600">{chartCode==="fund"+item.code?"收起基金走势":"查看今日走势和历史净值"} ↓</button>
                 {chartCode==="fund"+item.code && <div className="w-full basis-full rounded-xl border border-slate-100 p-2">
                   <p className="px-2 pt-2 text-sm font-medium">今日盘中估算走势</p>
