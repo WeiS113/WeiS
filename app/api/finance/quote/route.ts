@@ -2,7 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 type Result = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
-function num(v: unknown): number | null { const x = Number(v); return v === null || v === undefined || v === "-" || !Number.isFinite(x) ? null : x; }
+function num(v: unknown): number | null {
+  if (v == null || v === "" || v === "-") return null;
+  const n = Number(v); return Number.isFinite(n) ? n : null;
+}
+function quoteTime(v: unknown): string | null {
+  const s = String(v ?? "");
+  if (/^\\d{12,14}$/.test(s) && /^20\\d{2}/.test(s))
+    return s.slice(0,4) + "-" + s.slice(4,6) + "-" + s.slice(6,8) + " " + s.slice(8,10) + ":" + s.slice(10,12);
+  if (/^\\d{10}$/.test(s)) {
+    const d = new Date(Number(s) * 1000);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+  }
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code")?.trim() || "";
@@ -21,12 +34,12 @@ export async function GET(request: NextRequest) {
       result = { code, name: String(data.SHORTNAME || code), kind, price: num(data.DWJZ), change: num(data.JZZZL), time: data.FSRQ || data.JZRQ || null, source: "最新公布净值" };
     } else {
       const market = /^[569]/.test(code) ? 1 : 0;
-      const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${market}.${code}&fields=f43,f57,f58,f60,f170,f86`;
+      const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${market}.${code}&fltt=2&fields=f43,f57,f58,f60,f170,f86`;
       const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Referer: "https://quote.eastmoney.com/" }, signal: AbortSignal.timeout(8000), cache: "no-store" });
       if (!res.ok) throw new Error("Quote provider error");
       const data = (await res.json())?.data;
       if (!data?.f57) throw new Error("Symbol not found");
-      result = { code, name: String(data.f58 || code), kind, price: num(data.f43) === null ? null : num(data.f43)! / 100, change: num(data.f170) === null ? null : num(data.f170)! / 100, time: data.f86 ? new Date(Number(data.f86) * 1000).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : null, source: "第三方行情（可能延迟）" };
+      result = { code, name: String(data.f58 || code), kind, price: num(data.f43), change: num(data.f170), time: quoteTime(data.f86), source: "第三方行情（可能延迟）" };
     }
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
