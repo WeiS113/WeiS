@@ -6,6 +6,15 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 const modules = [
   {
+    title: "Finance",
+    subtitle: "Watch your investments.",
+    description: "股票 · 基金 · 自选行情",
+    href: "/finance",
+    symbol: "↗",
+    colors: "from-emerald-200/70 via-teal-100/60 to-cyan-200/70",
+    symbolColor: "text-emerald-600",
+  },
+  {
     title: "Planner",
     subtitle: "Make every day count.",
     description: "计划 · 任务 · 日历",
@@ -67,7 +76,7 @@ export default function Home() {
         </header>
 
         {/* 两个模块 */}
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           {modules.map((module) => (
             <Link
               key={module.title}
