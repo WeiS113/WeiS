@@ -77,6 +77,16 @@ export default function FinancePage() {
   }).filter((x): x is {code:string;amount:number;market:number;time:string|null} => x !== null);
   const estimateCoverage = covered.length ? Math.round(estimated.length / covered.length * 100) : 0;
   const estimatedDelta = estimated.reduce((sum,x)=>sum+x.amount,0);
+  const heldPositions = positions.filter(p => p.quantity > 0);
+  const quoteCoverage = heldPositions.length ? Math.round(pricedPositions.length / heldPositions.length * 100) : 0;
+  const knownProfit = totalMarket - knownCost;
+  const knownProfitRate = knownCost > 0 ? knownProfit / knownCost * 100 : null;
+  const assetBreakdown = [
+    { label: "场外基金", value: items.filter(x => x.kind === "fund").reduce((sum,x) => sum + (holdings["fund"+x.code]?.quantity ?? 0) * (quotes["fund"+x.code]?.price ?? 0),0) },
+    { label: "股票 / ETF", value: items.filter(x => x.kind === "stock").reduce((sum,x) => sum + (holdings["stock"+x.code]?.quantity ?? 0) * (quotes["stock"+x.code]?.price ?? 0),0) }
+  ];
+  const knownValue = assetBreakdown.reduce((sum,x) => sum+x.value,0);
+
 
 
   const refresh = useCallback(async () => {
@@ -289,6 +299,14 @@ export default function FinancePage() {
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
         </section>
         {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">持仓组合分析</h2><span className="text-xs text-slate-500">报价覆盖 {pricedPositions.length}/{heldPositions.length} · {heldPositions.length ? quoteCoverage + "%" : "无持仓"}</span></div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div><p className="text-xs text-slate-500">已报价持仓浮动收益率</p><p className={`mt-1 text-2xl font-semibold tabular-nums ${knownProfit >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{knownProfitRate === null ? "—" : (knownProfitRate >= 0 ? "+" : "") + knownProfitRate.toFixed(2) + "%"}</p><p className="mt-1 text-xs text-slate-400">仅按已获取报价的资产计算</p></div>
+            <div><p className="text-xs text-slate-500">已报价资产分布</p><div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">{assetBreakdown.map((part,i)=><div key={part.label} className={i===0?"bg-sky-500":"bg-amber-400"} style={{width:knownValue>0?part.value/knownValue*100+"%":"0%"}} />)}</div><div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">{assetBreakdown.map((part,i)=><span key={part.label}>{i===0?"●":"◆"} {part.label} {knownValue>0?(part.value/knownValue*100).toFixed(1)+"%":"—"}</span>)}</div></div>
+          </div>
+        </section>
+
         <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
         <section className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
