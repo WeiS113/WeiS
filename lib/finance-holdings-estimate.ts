@@ -42,7 +42,7 @@ export async function estimateFromHoldings(code:string, report?: (reason:string)
  const fail=(reason:string):null=>{report?.(reason);return null;};
  try{
   const base="https://fundmobapi.eastmoney.com/FundMNewApi/";
-  const params="?FCODE="+code+"&deviceid=weis-finance&plat=Android&product=EFund&version=6.2.8";
+  const params="?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0";
   const [holdRes,navRes]=await Promise.all([
    fetch(base+"FundMNInverstPosition"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:600}}).catch(()=>null),
    fetch(base+"FundMNDetailInformation"+params,{headers:domesticHeaders,signal:AbortSignal.timeout(6500),next:{revalidate:60}})
@@ -56,8 +56,8 @@ export async function estimateFromHoldings(code:string, report?: (reason:string)
   const payload=h?.Datas;
   const stocks=[payload?.fundStocks,payload?.FundStocks,payload?.fundStockList,payload?.stockList,payload?.List,Array.isArray(payload)?payload:null].find(Array.isArray)??[];
   let valid=stocks.map((x:Record<string,unknown>)=>({code:String(x.GPDM??x.STOCKCODE??x.CODE??""),name:String(x.GPJC??x.STOCKNAME??x.NAME??""),weight:num(x.JZBL??x.ZJZBL??x.WEIGHT)})).filter((x:{code:string;name:string;weight:number|null}):x is {code:string;name:string;weight:number}=>/^\d{6}$/.test(x.code)&&x.weight!==null&&x.weight>0&&x.weight<30).slice(0,10);
-  if(valid.length<3)valid=await archiveStocks(code);
-  if(valid.length<3)return fail("移动端及基金档案均未取得有效重仓股权重");
+  // The legacy FundArchivesDatas endpoint was retired; rely on the mobile JSON holdings data.
+  if(valid.length<3)return fail("移动端持仓接口未提供有效重仓股权重");
   const quotes=await Promise.all(valid.map(async (x:{code:string;name:string;weight:number})=>{
     try{
       const market=/^[569]/.test(x.code)?1:0;
