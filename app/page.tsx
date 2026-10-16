@@ -11,8 +11,8 @@ const modules = [
     description: "股票 · 基金 · 自选行情",
     href: "/finance",
     symbol: "↗",
-    colors: "from-emerald-200/70 via-teal-100/60 to-cyan-200/70",
-    symbolColor: "text-emerald-600",
+    colors: "from-rose-200/80 via-red-100/70 to-orange-200/60",
+    symbolColor: "text-red-600",
   },
   {
     title: "Planner",
