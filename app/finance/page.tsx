@@ -146,9 +146,37 @@ export default function FinancePage() {
     async function fetchEstimates() {
       if (funds.length === 0) { if (!cancelled) setEstimates({}); return; }
       try {
-        const response = await fetch("/api/finance/estimate?codes=" + funds.map(x => x.code).join(","), { cache:"no-store" });
-        if (!response.ok) throw new Error("estimate service unavailable");
-        const data = await response.json() as { estimates: (Estimate & {code:string})[] };
+        const codes = funds.map(x=>x.code).join(",");
+        let data: { estimates: (Estimate & {code:string})[] };
+        try {
+          const response = await fetch("/api/finance/estimate?codes=" + codes, {cache:"no-store"});
+          if (!response.ok) throw new Error("server estimate unavailable");
+          data = await response.json() as { estimates: (Estimate & {code:string})[] };
+        } catch {
+          data = {estimates:[]};
+        }
+        // If Cloudflare cannot reach the mainland upstream, try the mobile
+        // provider's CORS-enabled endpoint from the user's Chinese network.
+        const missing = funds.filter(x=>!(data.estimates||[]).some(e=>e.code===x.code&&e.estimatedNav!=null));
+        if (missing.length) {
+          try {
+            const u = "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo?pageIndex=1&pageSize=50&plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=weis-finance&Fcodes="+missing.slice(0,50).map(x=>x.code).join(",");
+            const res=await fetch(u,{cache:"no-store",signal:AbortSignal.timeout(5500)});
+            if(res.ok) {
+              const obj=await res.json();
+              const rows=Array.isArray(obj?.Datas)?obj.Datas:[];
+              const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+              const browserEstimates=rows.map((v:Record<string,unknown>)=>{
+                const code=String(v.FCODE??"");
+                const nav=Number(v.GSZ),pct=Number(v.GSZZL);
+                const time=String(v.GZTIME??"");
+                const stamp=time.replaceAll("/","-").match(/^20\\d{2}-\\d{2}-\\d{2}/)?.[0];
+                return {code,name:String(v.SHORTNAME||code),estimatedNav:stamp===today&&Number.isFinite(nav)&&nav>0?nav:null,change:stamp===today&&v.GSZZL!=null&&Number.isFinite(pct)?pct:null,time:time||null,source:"境内浏览器直连东方财富估值（非官方）"};
+              }).filter((x:{code:string;estimatedNav:number|null})=>/^\\d{6}$/.test(x.code)&&x.estimatedNav!=null);
+              data.estimates=[...(data.estimates||[]).filter(x=>x.estimatedNav!=null),...browserEstimates.filter((x:{code:string})=>!(data.estimates||[]).some(e=>e.code===x.code&&e.estimatedNav!=null))];
+            }
+          }catch { /* mobile endpoint also unavailable */ }
+        }
         if (!cancelled) {
           const values = Array.isArray(data.estimates) ? data.estimates : [];
           setEstimates(previous => ({...previous,...Object.fromEntries(values.map(x => [x.code, (x.estimatedNav == null && previous[x.code]?.estimatedNav != null) ? {...previous[x.code],source:"上一笔有效估值（当前请求无数据）"} : x]))}));
