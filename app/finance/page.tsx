@@ -62,7 +62,7 @@ export default function FinancePage() {
   const money = (x: number) => "¥" + x.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const refresh = useCallback(async () => {
-    if (!items.length) return;
+    if (!items.length) { setQuotes({}); return; }
     setLoading(true);
     try {
       const data = await Promise.all(items.map(async (item) => {
@@ -81,7 +81,7 @@ export default function FinancePage() {
 
   useEffect(() => {
     const q = input.trim();
-    if (q.length < 2) return;
+    if (q.length < 2) { setMatches([]); setSearchBusy(false); return; }
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setSearchBusy(true);
@@ -206,7 +206,7 @@ export default function FinancePage() {
           <h2 className="text-lg font-medium">添加自选</h2>
           <div className="mt-4 flex flex-wrap gap-3">
             <select aria-label="资产类型" value={type} onChange={e => setType(e.target.value as "stock" | "fund")} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"><option value="stock">A股 / ETF</option><option value="fund">场外基金</option></select>
-            <input aria-label="证券代码" inputMode="numeric" maxLength={6} placeholder="输入股票、基金名称或6位代码" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
+            <input aria-label="证券代码" inputMode="numeric" maxLength={40} placeholder="输入股票、基金名称或6位代码" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
             <button type="button" onClick={add} className="rounded-xl bg-slate-900 px-5 py-3 text-sm text-white">＋ 添加</button>
           </div>
           {input.trim().length >= 2 && <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white">
@@ -223,13 +223,13 @@ export default function FinancePage() {
             {items.map(item => { const q = quotes[item.kind + item.code]; const change = q?.change; return <div key={item.kind + item.code} className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-7">
               <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}</p></div>
               <div className="text-right"><p className="font-semibold tabular-nums">{q?.price == null ? "—" : q.price.toFixed(4)}</p><p className={`mt-1 text-sm font-medium tabular-nums ${change == null ? "text-slate-400" : change >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{change == null ? "—" : (change > 0 ? "+" : "") + change.toFixed(2) + "%"}</p><p className="text-[10px] text-slate-400">{q?.time || "暂无更新时间"}</p></div>
-              {item.kind === "stock" && <button type="button" onClick={() => setChartCode(chartCode === item.code ? null : item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.code ? "收起走势" : "查看走势"}</button>}
+              {<button type="button" onClick={() => setChartCode(chartCode === item.kind + item.code ? null : item.kind + item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.kind + item.code ? "收起走势" : "查看走势"}</button>}
               <button aria-label={`移除 ${item.code}`} title="移除自选" onClick={() => updateItems(items.filter(x => !(x.code === item.code && x.kind === item.kind)))} className="ml-2 rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600">✕</button>
               <div className="basis-full grid grid-cols-2 gap-3 pt-2 sm:ml-auto sm:basis-auto sm:w-[310px]"><label className="text-xs text-slate-500">持有份额 / 股数<input aria-label={`${item.code} 持有份额或股数`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.quantity ?? 0} onChange={e => setHolding(item.kind + item.code, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-xs text-slate-500">单位成本（元）<input aria-label={`${item.code} 单位成本`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.cost ?? 0} onChange={e => setHolding(item.kind + item.code, "cost", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label></div>
             </div>; })}
           </div>}
         </section>
-        {chartCode && items.some(item => item.kind === "stock" && item.code === chartCode) && <FinanceHistory code={chartCode} />}
+        {chartCode && items.some(item => item.kind + item.code === chartCode) && <FinanceHistory code={chartCode.replace(/^(stock|fund)/, "")} kind={chartCode.startsWith("fund") ? "fund" : "stock"} />}
         <p className="mt-6 text-xs leading-6 text-slate-400">行情仅供个人参考，不构成投资建议。A股和ETF报价可能延迟；场外基金展示最近公布的官方净值及对应日涨跌，不属于盘中实时估值。第三方接口可能限流或中断，自选和成本数据暂保存在当前浏览器中；当前盈亏未计手续费、分红及税费。</p>
       </div>
     </main>
