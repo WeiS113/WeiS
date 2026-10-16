@@ -238,7 +238,23 @@ export default function FinancePage(){
       <p className="mt-4 text-xs text-slate-400">{x.live?"盘中参考估值":"已公布净值或暂不可用"} · {x.time||"暂无时间"}</p>
       <p className="mt-1 text-[11px] text-slate-400">{x.source}</p>
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">当日实时估值变化</p><p className="mt-1 text-[11px] text-slate-400">交易日 09:30–11:30、13:00–15:00 · 每60秒采样</p></div><span className="text-xs font-semibold tabular-nums">{x.nav===null?"—":x.nav.toFixed(4)}</span></div>
-      {x.curve.length>=2?(()=>{const values=x.curve.map(p=>p.nav);const min=Math.min(...values),max=Math.max(...values),range=Math.max(max-min,0.0001);const pts=x.curve.filter(p=>marketMinute(p.at)!==null).map(p=>(12+(marketMinute(p.at)??0)/240*316).toFixed(1)+","+(100-(p.nav-min)/range*72).toFixed(1)).join(" ");const first=x.curve[0],last=x.curve[x.curve.length-1];return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"当日实时估值变化曲线"} className="mt-3 w-full"><line x1="12" x2="328" y1="100" y2="100" stroke="#e2e8f0"/><polyline points={pts} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/><circle cx={12+(marketMinute(last.at)??240)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/></svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div></>})():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">{x.live?"正在采集有效行情，至少两次采样后绘图。":"今日暂无有效估值，不能绘制真实变化曲线。"}</p>}</div>
+      {x.curve.length>=2?(()=>{
+        const usable=x.curve.filter(p=>marketMinute(p.at)!==null).sort((a,b)=>a.at-b.at);
+        if(usable.length<2)return <p className="mt-3 text-xs text-slate-400">交易时段有效采样不足，无法显示连续走势。</p>;
+        const values=usable.map(p=>p.nav),min=Math.min(...values),max=Math.max(...values),range=Math.max(max-min,0.0001);
+        const toXY=(p:CurvePoint)=>(12+(marketMinute(p.at)??0)/240*316).toFixed(1)+","+(100-(p.nav-min)/range*72).toFixed(1);
+        const segments:CurvePoint[][]=[];let segment:CurvePoint[]=[];
+        for(const p of usable){if(segment.length&&((marketMinute(p.at)??0)-(marketMinute(segment[segment.length-1].at)??0)>5)){segments.push(segment);segment=[];}segment.push(p);}
+        if(segment.length)segments.push(segment);
+        const first=usable[0],last=usable[usable.length-1];
+        const hhmm=(at:number)=>new Date(at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false});
+        return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"已采样时段的盘中估值变化；未采集时段留空"} className="mt-3 w-full">
+          <line x1="12" x2="328" y1="100" y2="100" stroke="#e2e8f0"/>
+          {segments.filter(s=>s.length>=2).map((s,i)=><polyline key={i} points={s.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>)}
+          <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
+        </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
+        <p className="mt-2 text-[11px] text-amber-700">本设备实际采样：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。未采集的时段留空，不代表基金净值不变。</p></>;
+      })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">尚无足够的有效盘中采样。网页打开前的历史分钟估值未被记录，不能自行补造。</p>}</div>
       {x.stocks.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer text-slate-600">披露重仓股 · 覆盖 {x.coverage??"—"}%</summary><div className="mt-2 space-y-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between gap-2"><span>{s.name} {s.code}</span><span>{s.weight.toFixed(2)}% · {signed(s.change)}</span></div>)}</div></details>}
       {issues[x.code]&&<details className="mt-3 text-xs text-amber-700"><summary className="cursor-pointer">盘中估算暂不可用 · 查看原因</summary><p className="mt-2">{issues[x.code]}</p></details>}
       <div className="mt-4 flex items-center gap-2 border-t border-slate-200 pt-3"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-600">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">历史净值</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto text-xs text-slate-400">移除</button></div>
