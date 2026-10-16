@@ -44,13 +44,52 @@ async function mobile(code:string):Promise<Point[]>{
  }).filter(Boolean);
  return normalize(parsed,code);
 }
+
+// On-exchange ETF minute quotes: market-data proxy, not a fund-published NAV curve.
+async function etfMinutes(code:string):Promise<Map<number,number>>{
+ const u=new URL("https://push2.eastmoney.com/api/qt/stock/trends2/get");
+ u.searchParams.set("secid","1."+code);u.searchParams.set("fields1","f1,f2,f3,f4,f5,f6,f7,f8");
+ u.searchParams.set("fields2","f51,f52,f53,f54,f55,f56,f57,f58");
+ u.searchParams.set("iscr","0");u.searchParams.set("ndays","1");
+ const r=await fetch(u,{cache:"no-store",signal:AbortSignal.timeout(6500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://quote.eastmoney.com/"}});
+ if(!r.ok)throw Error("ETF minute endpoint unreachable");
+ const d=(await r.json())?.data;
+ if(!Array.isArray(d?.trends)||!d.trends.length)throw Error("ETF minute history empty");
+ const today=localDate(Date.now()),result=new Map<number,number>();
+ for(const line of d.trends){
+  if(typeof line!=="string")continue;
+  const parts=line.split(",");
+  const stamp=Date.parse(parts[0]?.replace(" ","T")+":00+08:00");
+  const price=Number(parts[1]);
+  if(!Number.isFinite(stamp)||localDate(stamp)!==today||!Number.isFinite(price)||price<=0)continue;
+  const m=minute(stamp);if((m>=570&&m<=690)||(m>=780&&m<=900))result.set(m,price);
+ }
+ return result;
+}
+async function bondProxyCurve(code:string):Promise<Point[]>{
+ if(code!=="019500")return [];
+ const [convertible,sovereign]=await Promise.all([etfMinutes("511380"),etfMinutes("511010")]);
+ const minutes=[...convertible.keys()].filter(m=>sovereign.has(m)).sort((a,b)=>a-b);
+ if(minutes.length<2)return [];
+ // ETF intraday prices are normalized to each ETF's first available quote.
+ // This is a benchmark proxy percentage curve, NOT the C share's actual NAV.
+ const c0=convertible.get(minutes[0])!,s0=sovereign.get(minutes[0])!;
+ const iso=localDate(Date.now());
+ return minutes.map(m=>{
+  const h=String(Math.floor(m/60)).padStart(2,"0"),mm=String(m%60).padStart(2,"0");
+  const at=Date.parse(iso+"T"+h+":"+mm+":00+08:00");
+  const change=60*(convertible.get(m)!/c0-1)+40*(sovereign.get(m)!/s0-1);
+  return {at,nav:1+change/100,change};
+ });
+}
 export async function GET(request:NextRequest){
  const code=request.nextUrl.searchParams.get("code")??"";
  if(!/^\d{6}$/.test(code))return NextResponse.json({error:"invalid code"},{status:400});
- const feeds=await Promise.allSettled([pingzhong(code),mobile(code)]);
+ const feeds=await Promise.allSettled([pingzhong(code),mobile(code),bondProxyCurve(code)]);
  const first=feeds[0].status==="fulfilled"?feeds[0].value:[];
  const second=feeds[1].status==="fulfilled"?feeds[1].value:[];
- const points=first.length>=second.length?first:second;
- const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"请求或解析失败":first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"请求或解析失败":second.length>=2?"有效":"未返回当天有效分时点",count:second.length}];
- return NextResponse.json({code,points,source:points.length?(first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"基金平台未提供可验证的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
+ const proxy=feeds[2].status==="fulfilled"?feeds[2].value:[];
+ const points=first.length>=second.length&&first.length>=proxy.length?first:second.length>=proxy.length?second:proxy;
+ const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"请求或解析失败":first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"请求或解析失败":second.length>=2?"有效":"未返回当天有效分时点",count:second.length},{provider:"债基 ETF 分时代理",status:feeds[2].status==="rejected"?"行情获取失败":proxy.length>=2?"有效":"无对应代理",count:proxy.length}];
+ return NextResponse.json({code,points,source:points.length?(points===proxy?"债基 ETF 分时基准代理（非基金实际净值）":first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"基金平台未提供可验证的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
 }
