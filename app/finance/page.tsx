@@ -9,7 +9,7 @@ type Search={code:string;name:string;kind:"fund"|"stock"};
 const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
-const INITIAL=["110022"];
+const INITIAL:string[]=[];
 const money=(n:number)=>"¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const signed=(n:number)=> (n>0?"+":"")+n.toFixed(2)+"%";
 const positive=(n:number)=>n>=0?"text-rose-600":"text-emerald-600";
