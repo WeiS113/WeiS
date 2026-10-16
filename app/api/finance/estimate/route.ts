@@ -1,3 +1,4 @@
+import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 type Estimate = { code:string; estimatedNav:number|null; change:number|null; time:string|null; source:string };
@@ -40,6 +41,9 @@ export async function GET(request:NextRequest){
    for(const [code,value] of data){if(value.estimatedNav!==null||!found.has(code))found.set(code,value);}
   }catch{ /* continue to domestic mirror */ }
  }
+ const needFallback=codes.filter(code=>found.get(code)?.estimatedNav==null).slice(0,12);
+ const fallback=await Promise.all(needFallback.map(async code=>({code,value:await estimateFromHoldings(code)})));
+ for(const x of fallback){if(x.value)found.set(x.code,x.value);}
  const results=codes.map(code=>found.get(code)??{code,estimatedNav:null,change:null,time:null,source:"数据源无可用盘中估算"});
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
  return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
