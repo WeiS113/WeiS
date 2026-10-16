@@ -1,0 +1,11 @@
+name = "weis-fund-collector"
+main = "worker.js"
+compatibility_date = "2026-10-16"
+
+[triggers]
+crons = ["*/5 1-7 * * MON-FRI"]
+
+[vars]
+WEIS_SITE_URL = "https://weis13.cn"
+# Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Cloudflare encrypted secrets.
+# UTC cron includes non-trading hours; Worker filters Beijing 09:30-11:30, 13:00-15:00.
