@@ -4,6 +4,7 @@ import Link from "next/link";
 import FinanceIndices from "../../components/FinanceIndices";
 type Fund={code:string;name:string;nav:number|null;date:string;day:number|null;week:number|null;month:number|null;quarter:number|null;error?:string};
 type Watch={code:string;kind:string};
+type SearchResult={code:string;name:string;kind:"fund"|"stock"};
 const samples=["110022","161725","005827","000001","001632","005827"];
 const nav=[{name:"找基",href:"#funds",icon:"⌕"},{name:"看基",href:"/finance/tracker",icon:"◉"},{name:"对比",href:"/finance/research",icon:"⚖"},{name:"市场",href:"#market",icon:"▥"},{name:"组合",href:"/finance/tracker",icon:"▤"},{name:"策略",href:"#tools",icon:"◎"},{name:"基研所",href:"#tools",icon:"▧"}];
 function ret(rows:{date:string;close:number}[],days:number):number|null{if(rows.length<2)return null;const last=rows[rows.length-1];const before=Date.parse(last.date+"T00:00:00Z")-days*86400000;const anchor=[...rows].reverse().find(p=>Date.parse(p.date+"T00:00:00Z")<=before);return anchor&&anchor.close>0?(last.close/anchor.close-1)*100:null;}
@@ -16,10 +17,25 @@ export default function FinancePortal(){
  const [sort,setSort]=useState<"day"|"week"|"month"|"quarter">("day");
  const [desc,setDesc]=useState(true);
  const [notice,setNotice]=useState("");
+ const [suggestions,setSuggestions]=useState<SearchResult[]>([]);
+ const [searching,setSearching]=useState(false);
  const [showAll,setShowAll]=useState(false);
  useEffect(()=>{
   try{const rows=JSON.parse(localStorage.getItem("weis-finance-watchlist")||"[]") as Watch[];const saved=rows.filter(x=>x.kind==="fund"&&/^\d{6}$/.test(x.code)).map(x=>x.code);setCodes([...new Set([...saved,...samples])].slice(0,20));}catch{setCodes([...new Set(samples)]);}
  },[]);
+ useEffect(()=>{
+  const q=code.trim();
+  if(q.length<2){setSuggestions([]);setSearching(false);return;}
+  let cancelled=false;setSearching(true);
+  const timer=setTimeout(()=>{
+   void fetch("/api/finance/search?q="+encodeURIComponent(q),{cache:"no-store"})
+    .then(r=>r.ok?r.json():{results:[]})
+    .then(data=>{if(!cancelled)setSuggestions((Array.isArray(data.results)?data.results:[]).filter((x:SearchResult)=>x.kind==="fund").slice(0,8));})
+    .catch(()=>{if(!cancelled)setSuggestions([]);})
+    .finally(()=>{if(!cancelled)setSearching(false);});
+  },280);
+  return()=>{cancelled=true;clearTimeout(timer);};
+ },[code]);
  useEffect(()=>{
   if(!codes.length)return;
   let active=true;
@@ -57,7 +73,7 @@ export default function FinancePortal(){
   <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-7">
    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,1fr)]">
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#162b47] via-[#213953] to-[#315a68] p-6 text-white sm:p-8"><p className="text-xs font-semibold tracking-[.2em] text-cyan-200">WEIS FUND RESEARCH</p><h1 className="mt-4 text-3xl font-bold sm:text-4xl">用数据看懂基金</h1><p className="mt-3 max-w-lg text-sm leading-7 text-slate-200">找基金、看净值、比业绩、管组合。使用可获取的公开数据进行研究，盘中参考估值与已公布净值分开标记。</p><div className="mt-7 flex flex-wrap gap-3"><Link href="#funds" className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900">开始找基 →</Link><Link href="/finance/tracker" className="rounded-xl border border-white/40 px-5 py-3 text-sm font-medium text-white">进入实时盯盘</Link></div><div className="pointer-events-none absolute -bottom-12 -right-6 h-48 w-48 rounded-full border-[35px] border-cyan-300/10"/></div>
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-semibold">基金快捷查询</h2><span className="text-xs text-slate-400">公开净值</span></div><p className="mt-2 text-xs leading-5 text-slate-500">支持 6 位基金代码，加入下方研究列表并查看多周期收益。</p><div className="mt-4 flex gap-2"><input value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add()}} placeholder="输入基金代码，如 110022" inputMode="numeric" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/><button type="button" onClick={add} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">查询</button></div>{notice&&<p role="status" className="mt-2 text-xs text-amber-700">{notice}</p>}<div className="mt-5 grid grid-cols-2 gap-2"><Link href="/finance/research" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">多基金对比 ↗</Link><Link href="/finance/tracker" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">我的持仓 ↗</Link></div></div>
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-semibold">基金快捷查询</h2><span className="text-xs text-slate-400">公开净值</span></div><p className="mt-2 text-xs leading-5 text-slate-500">支持 6 位基金代码，加入下方研究列表并查看多周期收益。</p><div className="mt-4 flex gap-2"><input value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add()}} placeholder="输入基金代码，如 110022" inputMode="numeric" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/><button type="button" onClick={add} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">查询</button></div>{notice&&<p role="status" className="mt-2 text-xs text-amber-700">{notice}</p>}{(searching||suggestions.length>0)&&<div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-white">{searching&&<p className="px-3 py-2 text-xs text-slate-400">搜索基金中…</p>}{suggestions.map(s=><button type="button" key={s.code} onClick={()=>{setCode("");setSuggestions([]);setNotice("");setCodes(old=>old.includes(s.code)?old:[s.code,...old].slice(0,30));}} className="flex w-full items-center justify-between gap-2 border-t border-slate-50 px-3 py-2.5 text-left text-sm hover:bg-slate-50"><span className="truncate">{s.name}</span><span className="shrink-0 text-xs text-rose-600">{s.code} ＋</span></button>)}</div>}<div className="mt-5 grid grid-cols-2 gap-2"><Link href="/finance/research" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">多基金对比 ↗</Link><Link href="/finance/tracker" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">我的持仓 ↗</Link></div></div>
    </section>
    <section id="market" className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5"><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-lg font-bold">市场概览</h2><p className="mt-1 text-xs text-slate-500">主要指数行情由第三方提供，可能延迟</p></div><Link href="/finance/tracker" className="text-xs font-medium text-rose-600">查看持仓 →</Link></div><FinanceIndices/></section>
    <section id="funds" className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5"><div><h2 className="text-lg font-bold">基金速览</h2><p className="mt-1 text-xs text-slate-500">当前列出自选及示例基金，并非全市场排名；收益取自已公布的历史净值</p></div><Link href="/finance/research" className="text-sm font-medium text-rose-600">基金对比 →</Link></div>
