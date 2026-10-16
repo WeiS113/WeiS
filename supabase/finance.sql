@@ -26,7 +26,9 @@ create table if not exists public.finance_watchlist (
 alter table public.finance_watchlist enable row level security;
 drop policy if exists "finance_watchlist_owner_select" on public.finance_watchlist;
 drop policy if exists "finance_watchlist_owner_insert" on public.finance_watchlist;
+drop policy if exists "finance_watchlist_owner_update" on public.finance_watchlist;
 drop policy if exists "finance_watchlist_owner_delete" on public.finance_watchlist;
 create policy "finance_watchlist_owner_select" on public.finance_watchlist for select to authenticated using ((select auth.uid()) = user_id);
 create policy "finance_watchlist_owner_insert" on public.finance_watchlist for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "finance_watchlist_owner_update" on public.finance_watchlist for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy "finance_watchlist_owner_delete" on public.finance_watchlist for delete to authenticated using ((select auth.uid()) = user_id);
