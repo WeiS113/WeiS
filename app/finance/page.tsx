@@ -23,7 +23,7 @@ export default function FinancePage() {
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
   const [holdingReady, setHoldingReady] = useState(false);
   const [input, setInput] = useState("");
-  const [type, setType] = useState<"stock" | "fund">("stock");
+  const [type, setType] = useState<"stock" | "fund">("fund");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [lastRefresh, setLastRefresh] = useState("");
@@ -292,7 +292,7 @@ export default function FinancePage() {
       <div className="mx-auto max-w-6xl">
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">← 返回 WeiS</Link>
         <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">资产总览 · 持仓分析 · 基金净值</p></div>
+          <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">基金盘中估值 · 实时动态 · 预估收益</p></div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
         </div>
         <section className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -312,7 +312,7 @@ export default function FinancePage() {
         <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
         <section className="mt-4 rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><h2 className="text-lg font-semibold">我的基金 · 盘中估算涨跌</h2><p className="mt-1 text-xs text-slate-500">非官方净值，仅统计能获取估算且已录入份额的基金</p></div>
+            <div><h2 className="text-lg font-semibold">基金盯盘 · 今日预估涨跌</h2><p className="mt-1 text-xs text-slate-500">非官方净值，仅统计能获取估算且已录入份额的基金</p></div>
             <span className="text-xs text-slate-500">覆盖 {estimated.length}/{covered.length} 只</span>
           </div>
           <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"暂无盘中估算"}</p>
@@ -329,23 +329,11 @@ export default function FinancePage() {
             })}
           </div>
         </section>
-        <section className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-xs text-slate-500">有估算数据的基金 · 预估变化</p>
-            <p className={`mt-2 text-xl font-semibold tabular-nums ${estimatedDelta >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{estimated.length ? money(estimatedDelta) : "—"}</p>
-            <p className="mt-2 text-xs text-slate-400">以已公布净值为基准，非官方当日收益</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-xs text-slate-500">持仓基金估算覆盖率</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums">{covered.length ? estimateCoverage + "%" : "—"}</p>
-            <p className="mt-2 text-xs text-slate-400">{estimated.length} / {covered.length} 只基金具有可用估算</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-xs text-slate-500">数据状态</p>
-            <p className="mt-2 text-base font-semibold">{covered.length === 0 ? "尚未录入基金持仓" : estimated.length === covered.length ? "估算覆盖当前持仓" : "部分基金缺少盘中估算"}</p>
-            <p className="mt-2 text-xs text-slate-400">估算可能过期；需核对时间，不等于成交价</p>
-          </div>
-        </section>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={()=>setView("watchlist")} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-rose-700">＋ 添加基金</button>
+          <button type="button" onClick={()=>void refresh()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 disabled:opacity-50">刷新净值</button>
+          <span className="text-xs text-slate-500">估值约每60秒更新 · 非实时成交价</span>
+        </div>
         <FinanceIndices />
         <nav aria-label="Finance 页面分类" className="mt-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
           {([{ id: "holdings", text: "我的持仓" }, { id: "watchlist", text: "自选与搜索" }, { id: "settings", text: "导入与同步" }] as const).map(tab => <button key={tab.id} type="button" onClick={() => setView(tab.id)} className={`whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-medium ${view === tab.id ? "bg-slate-900 text-white" : "bg-white/80 text-slate-600"}`}>{tab.text}</button>)}
@@ -384,7 +372,7 @@ export default function FinancePage() {
         </div>}
         {(view === "holdings" || view === "watchlist") && <>
         <section className="mt-6 overflow-hidden rounded-[28px] border border-white/90 bg-white/75 shadow-sm backdrop-blur-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">{view === "holdings" ? "我的资产" : "我的自选"} <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">{view === "holdings" ? "基金持仓与自选详情" : "我的自选列表"} <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
           {items.length === 0 ? <p className="p-8 text-center text-slate-400">还没有自选，输入代码添加</p> : <div className="divide-y divide-slate-100">
             {items.map(item => { const q = quotes[item.kind + item.code]; const change = q?.change; return <div key={item.kind + item.code} className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-7">
               <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}{item.kind === "fund" && " · 已公布净值"}</p></div>
