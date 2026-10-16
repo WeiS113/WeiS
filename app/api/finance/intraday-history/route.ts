@@ -51,16 +51,24 @@ async function etfMinutes(code:string):Promise<Map<number,number>>{
  u.searchParams.set("secid","1."+code);u.searchParams.set("fields1","f1,f2,f3,f4,f5,f6,f7,f8");
  u.searchParams.set("fields2","f51,f52,f53,f54,f55,f56,f57,f58");
  u.searchParams.set("iscr","0");u.searchParams.set("ndays","1");
- const r=await fetch(u,{cache:"no-store",signal:AbortSignal.timeout(6500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://quote.eastmoney.com/"}});
- if(!r.ok)throw Error("ETF minute endpoint unreachable");
- const d=(await r.json())?.data;
- if(!Array.isArray(d?.trends)||!d.trends.length)throw Error("ETF minute history empty");
+ const hosts=["https://push2.eastmoney.com","https://push2his.eastmoney.com"];
+ let d:Record<string,unknown>|null=null;
+ for(const host of hosts){
+  try{
+   const url=new URL(u.pathname+"?"+u.searchParams.toString(),host);
+   const r=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(5500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://quote.eastmoney.com/"}});
+   if(!r.ok)continue;
+   const json=await r.json();
+   if(Array.isArray(json?.data?.trends)&&json.data.trends.length>1){d=json.data;break;}
+  }catch{/* query another independent quote-host endpoint */}
+ }
+ if(!d||!Array.isArray(d.trends))throw Error("ETF minute history unavailable on both market-data hosts");
  const today=localDate(Date.now()),result=new Map<number,number>();
  for(const line of d.trends){
   if(typeof line!=="string")continue;
   const parts=line.split(",");
   const stamp=Date.parse(parts[0]?.replace(" ","T")+":00+08:00");
-  const price=Number(parts[1]);
+  const price=Number(parts[1])>0?Number(parts[1]):Number(parts[2]);
   if(!Number.isFinite(stamp)||localDate(stamp)!==today||!Number.isFinite(price)||price<=0)continue;
   const m=minute(stamp);if((m>=570&&m<=690)||(m>=780&&m<=900))result.set(m,price);
  }
