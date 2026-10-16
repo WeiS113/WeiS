@@ -75,11 +75,22 @@ async function bondProxyCurve(code:string):Promise<Point[]>{
  // This is a benchmark proxy percentage curve, NOT the C share's actual NAV.
  const c0=convertible.get(minutes[0])!,s0=sovereign.get(minutes[0])!;
  const iso=localDate(Date.now());
+ // Read the published 019500 C-share NAV for the vertical scale.
+ const navUrl="https://fund.eastmoney.com/pingzhongdata/"+code+".js";
+ const navResponse=await fetch(navUrl,{cache:"no-store",signal:AbortSignal.timeout(5500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://fund.eastmoney.com/"}});
+ if(!navResponse.ok)throw Error("official NAV history unavailable");
+ const navRaw=await navResponse.text();
+ const navMatch=navRaw.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+ if(!navMatch)throw Error("official NAV trend missing");
+ const navRows=JSON.parse(navMatch[1]) as {x:number;y:number}[];
+ const last=navRows.at(-1);
+ if(!last||!Number.isFinite(last.y)||last.y<=0)throw Error("official NAV invalid");
+ const base=last.y;
  return minutes.map(m=>{
   const h=String(Math.floor(m/60)).padStart(2,"0"),mm=String(m%60).padStart(2,"0");
   const at=Date.parse(iso+"T"+h+":"+mm+":00+08:00");
   const change=60*(convertible.get(m)!/c0-1)+40*(sovereign.get(m)!/s0-1);
-  return {at,nav:1+change/100,change};
+  return {at,nav:base*(1+change/100),change};
  });
 }
 export async function GET(request:NextRequest){
