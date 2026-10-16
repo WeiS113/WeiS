@@ -78,14 +78,18 @@ export default function VoiceFundTrade({funds,onApply}:{funds:Fund[];onApply:(tr
  useEffect(()=>{
   if(!draft||!(/^\d{6}$/.test(fundCode))){setNav(null);setNavDate("");return;}
   let cancelled=false;setSaving(true);
-  void fetch("/api/finance/fund-history?code="+fundCode,{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("无法查询历史净值");return r.json();}).then(data=>{
+  void (async()=>{
+   const candidates:{date:string;close:number}[]=[];
+   try{const r=await fetch("/api/finance/fund-history?code="+fundCode,{cache:"no-store"});if(r.ok){const data=await r.json();if(Array.isArray(data?.points))candidates.push(...data.points);}}catch{}
+   let matched=candidates.find(p=>p.date===draft.date&&Number.isFinite(p.close)&&p.close>0);
+   if(!matched){
+    try{const r=await fetch("/api/finance/quote?kind=fund&code="+fundCode,{cache:"no-store"});if(r.ok){const quote=await r.json();const d=String(quote.time||"").replaceAll("/","-").slice(0,10);if(d===draft.date&&Number.isFinite(quote.price)&&quote.price>0)matched={date:d,close:quote.price};}}catch{}
+   }
    if(cancelled)return;
-   const pts=(Array.isArray(data?.points)?data.points:[]) as {date:string;close:number}[];
-   const matched=pts.find(p=>p.date===draft.date&&Number.isFinite(p.close)&&p.close>0);
    setNav(matched?.close??null);setNavDate(matched?.date??"");
-   if(!matched)setStatus("该交易日期尚无可核验的官方净值（可能尚未公布或为非交易日）。请等待净值确认后再记账，避免份额错误。");
-   else setStatus("已匹配 "+matched.date+" 的公布单位净值；请核对确认。若有手续费，请按实际确认金额修改交易金额。");
-  }).catch(()=>{if(!cancelled){setNav(null);setStatus("未能取得该日官方净值，暂不允许提交。");}}).finally(()=>{if(!cancelled)setSaving(false);});
+   if(!matched)setStatus("历史净值和最新公布净值均未提供该交易日净值。请根据交易平台确认单核实，暂不自动记账。");
+   else setStatus("已匹配 "+matched.date+" 的公布净值 "+matched.close.toFixed(4)+"；请核对交易确认日期、费用和份额。");
+  })().finally(()=>{if(!cancelled)setSaving(false);});
   return()=>{cancelled=true;};
  },[draft?.date,fundCode]);
  function confirm(){
