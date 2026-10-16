@@ -319,8 +319,8 @@ export default function FinancePage() {
           <div className="mt-4 divide-y divide-slate-100">
             {items.filter(x=>x.kind==="fund").map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
-              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&h?.quantity>0;
-              const delta=hasEstimate?h.quantity*(e.estimatedNav!-q!.price!):null;
+              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&(h?.quantity??0)>0;
+              const delta=hasEstimate?h!.quantity*(e!.estimatedNav!-q!.price!):null;
               return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · 估算时间 {e?.time||"未提供"}</p></div>
                 <div className="text-right"><p className={`text-sm font-semibold tabular-nums ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"暂无法计算":(delta>=0?"+":"")+money(delta)}</p><p className="mt-1 text-xs text-slate-500">{e?.change==null?"估算涨跌暂无":(e.change>=0?"+":"")+e.change.toFixed(2)+"%"} · {e?.estimatedNav==null?"估算净值暂无":e.estimatedNav.toFixed(4)}</p></div>
