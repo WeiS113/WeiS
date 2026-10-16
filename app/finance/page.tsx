@@ -115,13 +115,14 @@ export default function FinancePage() {
     let cancelled = false;
     async function fetchEstimates() {
       if (funds.length === 0) { if (!cancelled) setEstimates({}); return; }
-      const rows = await Promise.all(funds.map(async x => {
-        try {
-          const res = await fetch("/api/finance/estimate?code=" + encodeURIComponent(x.code), { cache: "no-store" });
-          return [x.code, res.ok ? await res.json() as Estimate : { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const;
-        } catch { return [x.code, { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const; }
-      }));
-      if (!cancelled) setEstimates(Object.fromEntries(rows));
+      try {
+        const response = await fetch("/api/finance/estimate?codes=" + funds.map(x => x.code).join(","), { cache:"no-store" });
+        if (!response.ok) throw new Error("estimate service unavailable");
+        const data = await response.json() as { estimates: (Estimate & {code:string})[] };
+        if (!cancelled) setEstimates(Object.fromEntries((Array.isArray(data.estimates) ? data.estimates : []).map(x => [x.code,x])));
+      } catch {
+        if (!cancelled) setEstimates(Object.fromEntries(funds.map(x=>[x.code,{estimatedNav:null,change:null,time:null,source:"估算接口暂不可用"}])));
+      }
     }
     void fetchEstimates();
     const timer = setInterval(() => { if (document.visibilityState === "visible") void fetchEstimates(); }, 60000);
