@@ -6,6 +6,7 @@ import Link from "next/link";
 type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
 type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
+type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const KEY = "weis-finance-watchlist";
 const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kind: "stock" }, { code: "110022", kind: "fund" }];
@@ -20,6 +21,8 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [lastRefresh, setLastRefresh] = useState("");
+  const [matches, setMatches] = useState<SearchResult[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
 
   useEffect(() => {
     try { const saved = localStorage.getItem(KEY); setItems(saved ? JSON.parse(saved) : START); }
@@ -71,12 +74,32 @@ export default function FinancePage() {
 
   useEffect(() => { void refresh(); const t = setInterval(() => void refresh(), 60000); return () => clearInterval(t); }, [refresh]);
 
+  useEffect(() => {
+    const q = input.trim();
+    if (q.length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearchBusy(true);
+      try {
+        const r = await fetch(`/api/finance/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const json = await r.json();
+        if (r.ok && !controller.signal.aborted) setMatches(Array.isArray(json.results) ? json.results : []);
+      } catch { if (!controller.signal.aborted) setMatches([]); }
+      finally { if (!controller.signal.aborted) setSearchBusy(false); }
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [input]);
+
   function updateItems(next: Saved[]) { setItems(next); localStorage.setItem(KEY, JSON.stringify(next)); }
+  function addResult(result: Saved) {
+    if (items.some(x => x.code === result.code && x.kind === result.kind)) { setMessage("已在自选列表中"); return; }
+    updateItems([...items, result]); setInput(""); setMatches([]); setMessage("");
+  }
   function add() {
     const code = input.trim();
     if (!/^\d{6}$/.test(code)) { setMessage("请输入有效的 6 位股票或基金代码"); return; }
     if (items.some(x => x.code === code && x.kind === type)) { setMessage("已在自选列表中"); return; }
-    updateItems([...items, { code, kind: type }]); setInput(""); setMessage("");
+    addResult({ code, kind: type });
   }
 
   return (
@@ -97,10 +120,15 @@ export default function FinancePage() {
           <h2 className="text-lg font-medium">添加自选</h2>
           <div className="mt-4 flex flex-wrap gap-3">
             <select aria-label="资产类型" value={type} onChange={e => setType(e.target.value as "stock" | "fund")} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm"><option value="stock">A股 / ETF</option><option value="fund">场外基金</option></select>
-            <input aria-label="证券代码" inputMode="numeric" maxLength={6} placeholder="输入6位代码，如 600519" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
+            <input aria-label="证券代码" inputMode="numeric" maxLength={6} placeholder="输入股票、基金名称或6位代码" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm" />
             <button type="button" onClick={add} className="rounded-xl bg-slate-900 px-5 py-3 text-sm text-white">＋ 添加</button>
           </div>
-          <p className="mt-3 text-xs text-slate-400">首版支持通过6位代码添加与查询；名称模糊搜索将作为后续功能。</p>
+          {input.trim().length >= 2 && <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+            {searchBusy && <p className="p-3 text-sm text-slate-400">搜索中…</p>}
+            {!searchBusy && matches.length === 0 && <p className="p-3 text-sm text-slate-400">暂无匹配结果；可使用6位代码直接添加。</p>}
+            {!searchBusy && matches.map(m => <button key={m.kind + m.code} type="button" onClick={() => addResult({ code: m.code, kind: m.kind })} className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm hover:bg-slate-50"><span>{m.name} <span className="text-slate-400">{m.code}</span></span><span className="shrink-0 text-xs text-slate-400">{m.kind === "fund" ? "场外基金" : "股票/ETF"} ＋</span></button>)}
+          </div>}
+          <p className="mt-3 text-xs text-slate-400">可按名称或代码搜索并选择结果，也可输入6位代码后直接添加；搜索结果来自第三方接口。</p>
           {message && <p role="status" className="mt-3 text-sm text-amber-700">{message}</p>}
         </section>
         <section className="mt-6 overflow-hidden rounded-[28px] border border-white/90 bg-white/75 shadow-sm backdrop-blur-xl">
