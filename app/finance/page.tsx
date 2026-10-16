@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
+import VoiceFundTrade,{type VoiceTrade} from "../../components/VoiceFundTrade";
 type Holding={quantity:number;cost:number};
 type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
@@ -11,6 +12,7 @@ const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
 const CURVES_KEY="weis-finance-intraday-curves-v2";
+const TRADES_KEY="weis-finance-voice-trades-v1";
 const INITIAL:string[]=[];
 const money=(n:number)=>"¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const signed=(n:number)=> (n>0?"+":"")+n.toFixed(2)+"%";
@@ -107,6 +109,24 @@ export default function FinancePage(){
   if(!Number.isFinite(q)||q<0||!Number.isFinite(c)||c<0){setMessage("份额与成本必须为非负数字");return;}
   setHoldings(old=>({...old,["fund"+editing]:{quantity:q,cost:c}}));setEditing(null);setMessage("");
  }
+ function applyVoiceTrade(trade:VoiceTrade){
+  const key="fund"+trade.code;
+  const old=holdings[key]??{quantity:0,cost:0};
+  const currentQuantity=Number(old.quantity)||0;
+  const currentCost=Number(old.cost)||0;
+  const shares=trade.amount/trade.nav;
+  if(trade.side==="sell"&&shares>currentQuantity+0.000001){setMessage("减仓失败："+trade.name+" 当前份额不足，请检查交易确认份额。");return;}
+  if(trade.side==="sell"&&currentQuantity===0){setMessage("减仓失败：尚未录入原始持仓。");return;}
+  const nextQuantity=trade.side==="buy"?currentQuantity+shares:Math.max(0,currentQuantity-shares);
+  const nextCost=trade.side==="buy"?(currentQuantity*currentCost+trade.amount)/nextQuantity:currentCost;
+  const record={...trade,shares,createdAt:new Date().toISOString(),holdingBefore:currentQuantity,holdingAfter:nextQuantity};
+  try{const previous=JSON.parse(localStorage.getItem(TRADES_KEY)||"[]");localStorage.setItem(TRADES_KEY,JSON.stringify([...(Array.isArray(previous)?previous:[]),record].slice(-1000)));}catch{setMessage("交易记录无法写入本地存储；未修改持仓。");return;}
+  setHoldings(prev=>({...prev,[key]:{quantity:nextQuantity,cost:nextCost}}));
+  setCodes(prev=>prev.includes(trade.code)?prev:[trade.code,...prev]);
+  setNames(prev=>({...prev,[trade.code]:trade.name}));
+  setExpanded(trade.code);
+  setMessage((trade.side==="buy"?"加仓":"减仓")+"已记账："+trade.name+"，金额 "+money(trade.amount)+"，折合 "+shares.toFixed(2)+" 份（未扣手续费）。");
+ }
  function remove(code:string){
   if(!window.confirm("移除基金 "+code+"？已录入的持仓数据会保留，重新添加后仍可恢复。"))return;
   setCodes(old=>old.filter(x=>x!==code));setEditing(null);
@@ -171,6 +191,7 @@ export default function FinancePage(){
      </div>}
     </article>)}</div>{!codes.length&&<p className="py-12 text-center text-sm text-slate-500">暂无基金，输入代码即可添加。</p>}
    </section>
+   <VoiceFundTrade funds={codes.map(code=>({code,name:names[code]||quotes[code]?.name||estimates[code]?.name||code}))} onApply={applyVoiceTrade}/>
    {editing&&<div role="dialog" aria-modal="true" aria-label="编辑基金持仓" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-semibold">编辑 {names[editing]||editing} 的持仓</h2><p className="mt-2 text-xs text-slate-500">输入实际持有份额和每份平均成本，不是购买金额。</p><label className="mt-4 block text-sm">持有份额<input type="number" min="0" step="any" value={quant} onChange={e=>setQuant(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label><label className="mt-4 block text-sm">每份成本（元）<input type="number" min="0" step="any" value={cost} onChange={e=>setCost(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label>{message&&<p className="mt-2 text-xs text-amber-700">{message}</p>}<div className="mt-5 flex gap-2"><button type="button" onClick={()=>setEditing(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm">取消</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-rose-600 py-3 text-sm font-semibold text-white">保存持仓</button></div></div></div>}
    <div className="mt-5 text-center text-xs text-slate-400">累计盈亏为当前参考市值减持仓成本，不包含已卖出份额的历史已实现收益。行情缺失时不以零填充。</div>
   </div>
