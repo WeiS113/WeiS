@@ -80,7 +80,7 @@ async function bondProxyCurve(code:string):Promise<Point[]>{
  const navResponse=await fetch(navUrl,{cache:"no-store",signal:AbortSignal.timeout(5500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://fund.eastmoney.com/"}});
  if(!navResponse.ok)throw Error("official NAV history unavailable");
  const navRaw=await navResponse.text();
- const navMatch=navRaw.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+ const navMatch=navRaw.match(/Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
  if(!navMatch)throw Error("official NAV trend missing");
  const navRows=JSON.parse(navMatch[1]) as {x:number;y:number}[];
  const last=navRows.at(-1);
