@@ -26,12 +26,20 @@ export async function GET(request: NextRequest) {
     let result: Result;
     if (kind === "fund") {
       const url = `https://fundmobapi.eastmoney.com/FundMNewApi/FundMNDetailInformation?FCODE=${code}&deviceid=weis&plat=Iphone&product=EFund&version=6.5.5`;
-      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Referer: "https://fund.eastmoney.com/" }, signal: AbortSignal.timeout(8000), cache: "no-store" });
-      if (!res.ok) throw new Error("Fund provider error");
-      const json = await res.json();
-      const data = json?.Datas;
-      if (String(data?.FCODE ?? "") !== code) throw new Error("Fund not found");
-      result = { code, name: String(data.SHORTNAME || code), kind, price: num(data.DWJZ) !== null && num(data.DWJZ)! > 0 ? num(data.DWJZ) : null, change: num(data.JZZZL), time: data.FSRQ || data.JZRQ || null, source: "最新公布净值" };
+      const headers = { "User-Agent": "Mozilla/5.0", Referer: "https://fund.eastmoney.com/" };
+      const urls = [url,`https://fundmobapi.eastmoney.com/FundMNewApi/FundMNBasicInformation?FCODE=${code}&deviceid=weis&plat=Android&product=EFund&version=6.2.8`];
+      let data: Record<string, unknown> | null = null;
+      for (const candidate of urls) {
+        try {
+          const res = await fetch(candidate, {headers, signal: AbortSignal.timeout(5000), cache:"no-store"});
+          if (!res.ok) continue;
+          const json = await res.json();
+          const value = json?.Datas;
+          if (value && String(value.FCODE??"")===code) {data=value;break;}
+        }catch { /* another domestic endpoint */ }
+      }
+      if (!data) throw new Error("Fund not found");
+      result = { code, name: String(data.SHORTNAME || code), kind, price: num(data.DWJZ) !== null && num(data.DWJZ)! > 0 ? num(data.DWJZ) : null, change: num(data.JZZZL), time: String(data.FSRQ || data.JZRQ || "") || null, source: "最新公布净值" };
     } else {
       const market = /^[569]/.test(code) ? 1 : 0;
       const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${market}.${code}&fltt=2&fields=f43,f57,f58,f60,f170,f86`;
