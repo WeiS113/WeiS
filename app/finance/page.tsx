@@ -96,11 +96,14 @@ export default function FinancePage() {
   const covered = items.filter(x => x.kind === "fund" && (holdings[x.kind + x.code]?.quantity ?? 0) > 0);
   const estimated = covered.map(x => {
     const h = holdings[x.kind + x.code];
-    const latest = quotes[x.kind + x.code]?.price;
     const quote = estimates[x.code];
     const nav = quote?.estimatedNav;
-    if (!h || latest == null || nav == null || !Number.isFinite(nav) || nav <= 0) return null;
-    return { code: x.code, amount: h.quantity * (nav - latest), market: h.quantity * nav, time: quote.time };
+    const change = quote?.change;
+    if (!h || h.quantity <= 0 || nav == null || change == null || !Number.isFinite(nav) || nav <= 0 || !Number.isFinite(change) || change <= -99) return null;
+    // Today's estimated gain must use the estimate's own reference NAV;
+    // the latest official NAV endpoint may fail or lag independently.
+    const referenceNav = nav / (1 + change / 100);
+    return { code: x.code, amount: h.quantity * (nav - referenceNav), market: h.quantity * nav, time: quote.time };
   }).filter((x): x is {code:string;amount:number;market:number;time:string|null} => x !== null);
   const estimateCoverage = covered.length ? Math.round(estimated.length / covered.length * 100) : 0;
   const estimatedDelta = estimated.reduce((sum,x)=>sum+x.amount,0);
@@ -370,8 +373,8 @@ export default function FinancePage() {
           <div className="mt-2 divide-y divide-slate-100">
             {items.filter(x=>x.kind==="fund"&&(activeGroup==="全部"||(activeGroup==="未分组"?!fundGroups[x.code]:fundGroups[x.code]===activeGroup))).sort((a,b)=>fundSort==="original"?0:fundSort==="gain"?(estimates[b.code]?.change??-Infinity)-(estimates[a.code]?.change??-Infinity):(estimates[a.code]?.change??Infinity)-(estimates[b.code]?.change??Infinity)).map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
-              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&(h?.quantity??0)>0;
-              const delta=hasEstimate?h!.quantity*(e!.estimatedNav!-q!.price!):null;
+              const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&e.change!=null&&e.change>-99&&(h?.quantity??0)>0;
+              const delta=hasEstimate?h!.quantity*e!.estimatedNav!*e!.change!/(100+e!.change!):null;
               return <div key={item.code} className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <div><p className="text-sm font-medium">{q?.name||item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {e?.source||"尚无估算源"} · 估算时间 {e?.time||"未提供"}{e?.coverage!=null?" · 披露持仓覆盖 "+e.coverage.toFixed(1)+"%":""}{e?.disclosure?" · 披露截止 "+e.disclosure:""}</p></div>
                 {(() => {
