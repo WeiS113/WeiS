@@ -34,10 +34,11 @@ export async function GET(request:NextRequest) {
   const code=(request.nextUrl.searchParams.get("code")||"").trim();
   if(!/^\d{6}$/.test(code))return NextResponse.json({error:"无效基金代码"},{status:400});
   try {
-    let points:Point[]=[];
-    try { points=await mobileHistory(code); } catch { /* fallback */ }
-    if(points.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&Number.isFinite(x.close)&&x.close>0).length < 2) points=await publicHistory(code);
+    // Independently request both published NAV feeds. A valid but stale mobile
+    // response must never suppress a newer official NAV in the public feed.
+    const [mobile,publicFeed]=await Promise.allSettled([mobileHistory(code),publicHistory(code)]);
     const unique=new Map<string,Point>();
+    const points=[...(publicFeed.status==="fulfilled"?publicFeed.value:[]),...(mobile.status==="fulfilled"?mobile.value:[])];
     for(const p of points)if(/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0)unique.set(p.date,p);
     const result=[...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-120);
     if(result.length<2)throw Error("No history");
