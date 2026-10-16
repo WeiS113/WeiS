@@ -1,88 +1,152 @@
 "use client";
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
-import FinanceIndices from "../../components/FinanceIndices";
-type Fund={code:string;name:string;nav:number|null;date:string;day:number|null;week:number|null;month:number|null;quarter:number|null;error?:string};
-type Watch={code:string;kind:string};
-type SearchResult={code:string;name:string;kind:"fund"|"stock"};
-const samples=["110022","161725","005827","000001","001632","005827"];
-const nav=[{name:"找基",href:"#funds",icon:"⌕"},{name:"看基",href:"/finance/tracker",icon:"◉"},{name:"对比",href:"/finance/research",icon:"⚖"},{name:"市场",href:"#market",icon:"▥"},{name:"组合",href:"/finance/tracker",icon:"▤"},{name:"策略",href:"#tools",icon:"◎"},{name:"基研所",href:"#tools",icon:"▧"}];
-function ret(rows:{date:string;close:number}[],days:number):number|null{if(rows.length<2)return null;const last=rows[rows.length-1];const before=Date.parse(last.date+"T00:00:00Z")-days*86400000;const anchor=[...rows].reverse().find(p=>Date.parse(p.date+"T00:00:00Z")<=before);return anchor&&anchor.close>0?(last.close/anchor.close-1)*100:null;}
-function gain(value:number|null){return value===null?"—":(value>0?"+":"")+value.toFixed(2)+"%";}
-export default function FinancePortal(){
- const [funds,setFunds]=useState<Fund[]>([]);
+type Holding={quantity:number;cost:number};
+type Entry={code:string;kind:"fund"|"stock"};
+type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
+type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number};
+type Search={code:string;name:string;kind:"fund"|"stock"};
+const HOLDINGS_KEY="weis-finance-holdings";
+const WATCH_KEY="weis-finance-watchlist";
+const PORTFOLIO_KEY="weis-finance-portfolio-v2";
+const INITIAL=["110022"];
+const money=(n:number)=>"¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const signed=(n:number)=> (n>0?"+":"")+n.toFixed(2)+"%";
+const positive=(n:number)=>n>=0?"text-rose-600":"text-emerald-600";
+const valid=(v:unknown):v is number=>typeof v==="number"&&Number.isFinite(v)&&v>0;
+function isFresh(time:string|null|undefined){if(!time)return false;const date=time.replaceAll("/","-").slice(0,10);return date===new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});}
+export default function FinancePage(){
  const [codes,setCodes]=useState<string[]>([]);
- const [code,setCode]=useState("");
- const [loading,setLoading]=useState(true);
- const [sort,setSort]=useState<"day"|"week"|"month"|"quarter">("day");
- const [desc,setDesc]=useState(true);
- const [notice,setNotice]=useState("");
- const [suggestions,setSuggestions]=useState<SearchResult[]>([]);
+ const [holdings,setHoldings]=useState<Record<string,Holding>>({});
+ const [names,setNames]=useState<Record<string,string>>({});
+ const [ready,setReady]=useState(false);
+ const [quotes,setQuotes]=useState<Record<string,Quote>>({});
+ const [estimates,setEstimates]=useState<Record<string,Estimate>>({});
+ const [issues,setIssues]=useState<Record<string,string>>({});
+ const [loading,setLoading]=useState(false);
+ const [updated,setUpdated]=useState("");
+ const [input,setInput]=useState("");
+ const [results,setResults]=useState<Search[]>([]);
  const [searching,setSearching]=useState(false);
- const [showAll,setShowAll]=useState(false);
+ const [editing,setEditing]=useState<string|null>(null);
+ const [quant,setQuant]=useState("");
+ const [cost,setCost]=useState("");
+ const [message,setMessage]=useState("");
+ const [sort,setSort]=useState<"custom"|"change"|"profit">("custom");
+ const refreshing=useRef(false);
  useEffect(()=>{
-  try{const rows=JSON.parse(localStorage.getItem("weis-finance-watchlist")||"[]") as Watch[];const saved=rows.filter(x=>x.kind==="fund"&&/^\d{6}$/.test(x.code)).map(x=>x.code);setCodes([...new Set([...saved,...samples])].slice(0,20));}catch{setCodes([...new Set(samples)]);}
+  try{
+   const old=JSON.parse(localStorage.getItem(WATCH_KEY)||"[]") as Entry[];
+   const existing=Array.isArray(old)?old.filter(x=>x.kind==="fund"&&/^\d{6}$/.test(x.code)).map(x=>x.code):[];
+   const saved=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null") as {codes?:string[];names?:Record<string,string>}|null;
+   const restored=Array.isArray(saved?.codes)?saved.codes.filter(x=>/^\d{6}$/.test(x)):[];
+   setCodes([...new Set([...restored,...existing,...(existing.length||restored.length?[]:INITIAL)])]);
+   setNames(saved?.names&&typeof saved.names==="object"?saved.names:{});
+   const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
+   setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
+  }catch{setCodes(INITIAL);}
+  setReady(true);
  },[]);
+ useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));},[ready,codes,names]);
+ useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
+ const refresh=useCallback(async()=>{
+  if(refreshing.current||codes.length===0)return;
+  refreshing.current=true;setLoading(true);
+  try{
+   const [estimateOutcome,quoteOutcomes]=await Promise.all([
+    fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;}).catch(()=>null),
+    Promise.all(codes.map(async code=>{try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"});if(!response.ok)return null;return await response.json() as Quote;}catch{return null;}}))
+   ]);
+   const newQuotes:Record<string,Quote>={};
+   for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
+   setQuotes(prev=>({...prev,...newQuotes}));
+   const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
+   setEstimates(prev=>{
+    const next={...prev};
+    for(const e of obtained)next[e.code]=e;
+    return next;
+   });
+   setIssues(Object.fromEntries(codes.map(code=>{
+    const e=obtained.find(x=>x.code===code);
+    return [code,e?.change!=null&&valid(e.estimatedNav)?"":e?.diagnostic||(!estimateOutcome?"估值服务请求失败":"数据源暂未提供有效的盘中估算")];
+   })));
+   for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
+   setUpdated(new Date().toLocaleTimeString("zh-CN",{hour12:false}));
+  }finally{refreshing.current=false;setLoading(false);}
+ },[codes]);
+ useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer);},[ready,codes,refresh]);
  useEffect(()=>{
-  const q=code.trim();
-  if(q.length<2){setSuggestions([]);setSearching(false);return;}
-  let cancelled=false;setSearching(true);
-  const timer=setTimeout(()=>{
+  const q=input.trim();if(q.length<2){setResults([]);return;}
+  let stopped=false;const timer=setTimeout(()=>{
+   setSearching(true);
    void fetch("/api/finance/search?q="+encodeURIComponent(q),{cache:"no-store"})
     .then(r=>r.ok?r.json():{results:[]})
-    .then(data=>{if(!cancelled)setSuggestions((Array.isArray(data.results)?data.results:[]).filter((x:SearchResult)=>x.kind==="fund").slice(0,8));})
-    .catch(()=>{if(!cancelled)setSuggestions([]);})
-    .finally(()=>{if(!cancelled)setSearching(false);});
-  },280);
-  return()=>{cancelled=true;clearTimeout(timer);};
- },[code]);
- useEffect(()=>{
-  if(!codes.length)return;
-  let active=true;
-  async function load(){
-   setLoading(true);
-   const rows=await Promise.all(codes.map(async c=>{
-    try{
-     const [history,quote]=await Promise.all([
-      fetch("/api/finance/fund-history?code="+c,{cache:"no-store"}),
-      fetch("/api/finance/quote?code="+c+"&kind=fund",{cache:"no-store"}).catch(()=>null)
-     ]);
-     if(!history.ok)throw Error("历史净值暂不可用");
-     const json=await history.json();const raw=Array.isArray(json?.points)?json.points:[];
-     const points=raw.filter((x:{date:string;close:number})=>/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&Number.isFinite(x.close)&&x.close>0).sort((a:{date:string},b:{date:string})=>a.date.localeCompare(b.date));
-     if(!points.length)throw Error("无有效净值");
-     const q=quote?.ok?await quote.json():null;
-     const last=points[points.length-1];
-     return {code:c,name:String(q?.name||c),nav:last.close,date:last.date,day:points.length>1?(last.close/points[points.length-2].close-1)*100:null,week:ret(points,7),month:ret(points,30),quarter:ret(points,90)} as Fund;
-    }catch(e){return {code:c,name:c,nav:null,date:"",day:null,week:null,month:null,quarter:null,error:e instanceof Error?e.message:"暂不可用"} as Fund;}
-   }));
-   if(active){setFunds(rows);setLoading(false);}
-  }
-  void load();return ()=>{active=false;};
- },[codes]);
- function add(){
-  const v=code.trim();
-  if(!/^\d{6}$/.test(v)){setNotice("请输入有效的六位基金代码");return;}
-  if(codes.includes(v)){setNotice("已在列表中");return;}
-  setCodes(old=>[v,...old].slice(0,30));setCode("");setNotice("");
+    .then(data=>{if(!stopped)setResults((Array.isArray(data.results)?data.results:[]).filter((x:Search)=>x.kind==="fund").slice(0,8));})
+    .catch(()=>{if(!stopped)setResults([]);})
+    .finally(()=>{if(!stopped)setSearching(false);});
+  },300);
+  return()=>{stopped=true;clearTimeout(timer);};
+ },[input]);
+ function add(code:string,name?:string){
+  if(!/^\d{6}$/.test(code)){setMessage("请输入正确的六位基金代码");return;}
+  if(codes.includes(code)){setMessage("已在我的基金中");return;}
+  setCodes(old=>[code,...old]);if(name)setNames(old=>({...old,[code]:name}));setInput("");setResults([]);setMessage("");
  }
- const ordered=[...funds].sort((a,b)=>{const av=a[sort],bv=b[sort];if(av===null)return 1;if(bv===null)return -1;return desc?bv-av:av-bv;});
- const visible=showAll?ordered:ordered.slice(0,10);
- return <main className="min-h-screen bg-[#f5f7fb] text-slate-800">
-  <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 lg:px-7"><Link href="/finance" className="shrink-0 text-xl font-black tracking-tight text-slate-900">WeiS <span className="text-rose-600">基金</span></Link><nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">{nav.map(item=><Link key={item.name} href={item.href} className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-rose-600"><span className="mr-1 opacity-70">{item.icon}</span>{item.name}</Link>)}</nav><Link href="/" className="hidden shrink-0 text-xs text-slate-400 sm:block">WeiS 首页 ↗</Link></div></header>
-  <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-7">
-   <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,1fr)]">
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#162b47] via-[#213953] to-[#315a68] p-6 text-white sm:p-8"><p className="text-xs font-semibold tracking-[.2em] text-cyan-200">WEIS FUND RESEARCH</p><h1 className="mt-4 text-3xl font-bold sm:text-4xl">用数据看懂基金</h1><p className="mt-3 max-w-lg text-sm leading-7 text-slate-200">找基金、看净值、比业绩、管组合。使用可获取的公开数据进行研究，盘中参考估值与已公布净值分开标记。</p><div className="mt-7 flex flex-wrap gap-3"><Link href="#funds" className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900">开始找基 →</Link><Link href="/finance/tracker" className="rounded-xl border border-white/40 px-5 py-3 text-sm font-medium text-white">进入实时盯盘</Link></div><div className="pointer-events-none absolute -bottom-12 -right-6 h-48 w-48 rounded-full border-[35px] border-cyan-300/10"/></div>
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-semibold">基金快捷查询</h2><span className="text-xs text-slate-400">公开净值</span></div><p className="mt-2 text-xs leading-5 text-slate-500">支持 6 位基金代码，加入下方研究列表并查看多周期收益。</p><div className="mt-4 flex gap-2"><input value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add()}} placeholder="输入基金代码，如 110022" inputMode="numeric" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-200"/><button type="button" onClick={add} className="rounded-xl bg-rose-600 px-4 py-3 text-sm font-medium text-white">查询</button></div>{notice&&<p role="status" className="mt-2 text-xs text-amber-700">{notice}</p>}{(searching||suggestions.length>0)&&<div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-white">{searching&&<p className="px-3 py-2 text-xs text-slate-400">搜索基金中…</p>}{suggestions.map(s=><button type="button" key={s.code} onClick={()=>{setCode("");setSuggestions([]);setNotice("");setCodes(old=>old.includes(s.code)?old:[s.code,...old].slice(0,30));}} className="flex w-full items-center justify-between gap-2 border-t border-slate-50 px-3 py-2.5 text-left text-sm hover:bg-slate-50"><span className="truncate">{s.name}</span><span className="shrink-0 text-xs text-rose-600">{s.code} ＋</span></button>)}</div>}<div className="mt-5 grid grid-cols-2 gap-2"><Link href="/finance/research" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">多基金对比 ↗</Link><Link href="/finance/tracker" className="rounded-xl bg-slate-50 px-3 py-3 text-center text-sm text-slate-600">我的持仓 ↗</Link></div></div>
+ function edit(code:string){setEditing(code);setQuant(String(holdings["fund"+code]?.quantity??""));setCost(String(holdings["fund"+code]?.cost??""));setMessage("");}
+ function save(){
+  if(!editing)return;
+  const q=Number(quant),c=Number(cost);
+  if(!Number.isFinite(q)||q<0||!Number.isFinite(c)||c<0){setMessage("份额与成本必须为非负数字");return;}
+  setHoldings(old=>({...old,["fund"+editing]:{quantity:q,cost:c}}));setEditing(null);setMessage("");
+ }
+ function remove(code:string){
+  if(!window.confirm("移除基金 "+code+"？已录入的持仓数据会保留，重新添加后仍可恢复。"))return;
+  setCodes(old=>old.filter(x=>x!==code));setEditing(null);
+ }
+ const positions=codes.map(code=>{
+  const holding=holdings["fund"+code]??{quantity:0,cost:0};
+  const q=Number(holding.quantity)||0,c=Number(holding.cost)||0;
+  const estimate=estimates[code],quote=quotes[code];
+  const live=estimate!=null&&valid(estimate.estimatedNav)&&estimate.change!=null&&Number.isFinite(estimate.change)&&isFresh(estimate.time)&&!estimate.source.includes("历史");
+  const nav=live?estimate.estimatedNav!:valid(quote?.price)?quote!.price!:null;
+  const base=live&&estimate!.change!>-99?estimate!.estimatedNav!/(1+estimate!.change!/100):null;
+  const invested=q*c;
+  const market=nav!==null?q*nav:null;
+  const profit=market!==null?market-invested:null;
+  const today=base!==null?q*(nav!-base):null;
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据"};
+ });
+ const held=positions.filter(x=>x.q>0);
+ const valueKnown=held.filter(x=>x.market!==null);
+ const totalValue=valueKnown.reduce((a,x)=>a+x.market!,0);
+ const knownCost=valueKnown.reduce((a,x)=>a+x.invested,0);
+ const totalProfit=totalValue-knownCost;
+ const todayHeld=held.filter(x=>x.live&&x.today!==null);
+ const todayTotal=todayHeld.reduce((a,x)=>a+x.today!,0);
+ const displayed=[...positions].sort((a,b)=>sort==="change"?(b.change??-999)-(a.change??-999):sort==="profit"?(b.profit??-Infinity)-(a.profit??-Infinity):0);
+ return <main className="min-h-screen bg-[#f5f6f8] text-slate-800">
+  <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4"><div><Link href="/" className="text-xs text-slate-400">WeiS /</Link><h1 className="text-xl font-bold">我的基金账户</h1></div><button type="button" disabled={loading} onClick={()=>void refresh()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading?"更新中…":"↻ 刷新行情"}</button></div></header>
+  <div className="mx-auto max-w-6xl px-4 py-5">
+   <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>每 60 秒刷新 · 最近检查 {updated||"尚未获取"}</span><span>盘中估算不是基金官方净值；数据可能延迟</span></div>
+   <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="rounded-2xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(held.reduce((a,x)=>a+x.invested,0))}</p><p className="mt-2 text-xs text-slate-400">{held.length} 只持有基金</p></div>
+    <div className="rounded-2xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">已可计算市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{valueKnown.length?money(totalValue):"—"}</p><p className="mt-2 text-xs text-slate-400">覆盖 {valueKnown.length}/{held.length} 只持仓</p></div>
+    <div className="rounded-2xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">累计浮动盈亏</p><p className={"mt-2 text-xl font-semibold tabular-nums "+positive(totalProfit)}>{valueKnown.length?(totalProfit>=0?"+":"")+money(totalProfit):"—"}</p><p className="mt-2 text-xs text-slate-400">只计算可获取净值的持仓</p></div>
+    <div className="rounded-2xl bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">今日预估收益</p><p className={"mt-2 text-xl font-semibold tabular-nums "+positive(todayTotal)}>{todayHeld.length?(todayTotal>=0?"+":"")+money(todayTotal):"—"}</p><p className="mt-2 text-xs text-slate-400">有效盘中估算 {todayHeld.length}/{held.length} 只</p></div>
    </section>
-   <section id="market" className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5"><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-lg font-bold">市场概览</h2><p className="mt-1 text-xs text-slate-500">主要指数行情由第三方提供，可能延迟</p></div><Link href="/finance/tracker" className="text-xs font-medium text-rose-600">查看持仓 →</Link></div><FinanceIndices/></section>
-   <section id="funds" className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5"><div><h2 className="text-lg font-bold">基金速览</h2><p className="mt-1 text-xs text-slate-500">当前列出自选及示例基金，并非全市场排名；收益取自已公布的历史净值</p></div><Link href="/finance/research" className="text-sm font-medium text-rose-600">基金对比 →</Link></div>
-    <div className="flex flex-wrap gap-2 border-b border-slate-100 px-5 py-3 text-xs">{([{key:"day",label:"最新净值日"},{key:"week",label:"近7日"},{key:"month",label:"近1月"},{key:"quarter",label:"近3月"}] as const).map(s=><button type="button" key={s.key} onClick={()=>{if(sort===s.key)setDesc(v=>!v);else{setSort(s.key);setDesc(true);}}} className={sort===s.key?"rounded-full bg-slate-900 px-3 py-2 font-medium text-white":"rounded-full bg-slate-100 px-3 py-2 text-slate-600"}>{s.label} {sort===s.key?(desc?"↓":"↑"):""}</button>)}</div>
-    <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3 font-medium">基金名称 / 代码</th><th className="py-3 font-medium">最新净值</th><th className="py-3 font-medium">净值日涨跌</th><th className="py-3 font-medium">近7日</th><th className="py-3 font-medium">近1月</th><th className="py-3 font-medium">近3月</th><th className="py-3 font-medium">操作</th></tr></thead><tbody>{visible.map(f=><tr key={f.code} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-5 py-3"><Link href={"/finance/fund/"+f.code} className="font-semibold text-slate-700 hover:text-rose-600 hover:underline">{f.name}</Link><p className="mt-1 text-xs text-slate-400">{f.code}.OF {f.error?"· "+f.error:""}</p></td><td className="py-3 font-medium tabular-nums">{f.nav===null?"—":f.nav.toFixed(4)}<p className="text-[11px] font-normal text-slate-400">{f.date||"暂无日期"}</p></td>{([f.day,f.week,f.month,f.quarter] as (number|null)[]).map((n,i)=><td key={i} className={n===null?"py-3 text-slate-400":n>=0?"py-3 font-medium tabular-nums text-rose-600":"py-3 font-medium tabular-nums text-emerald-600"}>{gain(n)}</td>)}<td className="py-3"><Link href={"/finance/fund/"+f.code} className="text-xs font-semibold text-rose-600">详情 ↗</Link></td></tr>)}</tbody></table></div>
-    {loading&&<p className="py-5 text-center text-sm text-slate-500">正在查询基金历史净值…</p>}{!loading&&funds.length===0&&<p className="p-6 text-sm text-slate-500">尚无数据，请输入基金代码。</p>}{ordered.length>10&&<button type="button" onClick={()=>setShowAll(v=>!v)} className="w-full border-t border-slate-100 py-3 text-sm text-rose-600">{showAll?"收起":"查看全部"} →</button>}
+   <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">我的基金</h2><p className="mt-1 text-xs text-slate-500">录入持有份额和成本，自动计算市值、累计盈亏和盘中收益</p></div><select aria-label="基金排序" value={sort} onChange={e=>setSort(e.target.value as typeof sort)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs"><option value="custom">添加顺序</option><option value="change">今日涨幅</option><option value="profit">累计收益</option></select></div>
+    <div className="relative mt-4"><div className="flex gap-2"><input inputMode="search" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add(input.trim())}} placeholder="搜索基金名称 / 输入六位基金代码" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-100"/><button type="button" onClick={()=>add(input.trim())} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white">＋ 添加</button></div>{searching&&<p className="mt-2 text-xs text-slate-400">正在搜索…</p>}{results.length>0&&<div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{results.map(x=><button key={x.code} type="button" onClick={()=>add(x.code,x.name)} className="flex w-full justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-slate-50"><span className="truncate">{x.name}</span><span className="shrink-0 text-xs text-rose-600">{x.code} ＋</span></button>)}</div>}</div>
+    {message&&<p role="status" className="mt-2 text-xs text-amber-700">{message}</p>}
+    <div className="mt-4 divide-y divide-slate-100">{displayed.map(x=><div key={x.code} className="py-4">
+     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><Link href={"/finance/fund/"+x.code} className="font-semibold hover:text-rose-600">{x.name}</Link><p className="mt-1 text-xs text-slate-400">{x.code} · {x.live?"盘中参考估值":"最近公布净值或暂无行情"}</p><p className="mt-1 text-xs text-slate-400">{x.source} · {x.time||"尚无更新时间"}</p></div>
+     <div className="text-right"><p className={"text-xl font-bold tabular-nums "+(x.change===null?"text-slate-400":positive(x.change))}>{x.change===null?"暂无盘中涨跌":signed(x.change)}</p><p className="mt-1 text-sm tabular-nums text-slate-500">每份 {x.nav===null?"—":x.nav.toFixed(4)}</p></div></div>
+     <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-xs sm:grid-cols-4"><div><p className="text-slate-400">持有份额 / 成本</p><p className="mt-1 font-semibold">{x.q.toLocaleString("zh-CN")} 份 / {x.c.toFixed(4)}</p></div><div><p className="text-slate-400">当前估算市值</p><p className="mt-1 font-semibold">{x.market===null?"—":money(x.market)}</p></div><div><p className="text-slate-400">累计浮盈亏</p><p className={"mt-1 font-semibold "+(x.profit===null?"text-slate-400":positive(x.profit))}>{x.profit===null?"—":(x.profit>=0?"+":"")+money(x.profit)}</p></div><div><p className="text-slate-400">今日预估收益</p><p className={"mt-1 font-semibold "+(x.today===null?"text-slate-400":positive(x.today))}>{x.today===null?"—":(x.today>=0?"+":"")+money(x.today)}</p></div></div>
+     {issues[x.code]&&<p className="mt-2 text-xs text-amber-700">估值状态：{issues[x.code]}</p>}
+     <div className="mt-3 flex gap-2"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">查看净值走势</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto rounded-lg px-3 py-2 text-xs text-slate-400">移除</button></div>
+    </div>)}</div>{!codes.length&&<p className="py-12 text-center text-sm text-slate-500">暂无基金，输入代码即可添加。</p>}
    </section>
-   <section id="tools"><div className="mb-4"><h2 className="text-xl font-bold">研究工具</h2><p className="mt-1 text-sm text-slate-500">类似基金研究平台的工作流，功能按真实数据能力逐步开放</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[{title:"实时基金盯盘",description:"盘中估算、参考收益、重仓跟踪",href:"/finance/tracker",icon:"◉",state:"数据源持续完善"},{title:"多基金对比",description:"净值、收益与历史趋势横向比较",href:"/finance/research",icon:"⚖",state:"已开放"},{title:"自选基金与分组",description:"收藏、分组、持有份额和成本",href:"/finance/tracker",icon:"▤",state:"已开放"},{title:"市场指数",description:"中国市场主要指数行情",href:"#market",icon:"▥",state:"取决于行情源"}].map(x=><Link key={x.title} href={x.href} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-rose-200"><span className="text-2xl text-rose-600">{x.icon}</span><h3 className="mt-4 font-semibold">{x.title}</h3><p className="mt-2 min-h-12 text-xs leading-6 text-slate-500">{x.description}</p><div className="mt-3 flex justify-between text-xs"><span className="text-slate-400">{x.state}</span><span className="text-rose-600">进入 →</span></div></Link>)}</div></section>
-   <footer className="border-t border-slate-200 py-6 text-xs leading-6 text-slate-400">WeiS 基金数据研究平台 · 公开市场信息仅作研究参考，不构成投资建议。部分指标为历史净值收益，不代表盘中估值。暂不提供虚构的全市场榜单、市场温度计或实时行情。</footer>
+   {editing&&<div role="dialog" aria-modal="true" aria-label="编辑基金持仓" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-semibold">编辑 {names[editing]||editing} 的持仓</h2><p className="mt-2 text-xs text-slate-500">输入实际持有份额和每份平均成本，不是购买金额。</p><label className="mt-4 block text-sm">持有份额<input type="number" min="0" step="any" value={quant} onChange={e=>setQuant(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label><label className="mt-4 block text-sm">每份成本（元）<input type="number" min="0" step="any" value={cost} onChange={e=>setCost(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label>{message&&<p className="mt-2 text-xs text-amber-700">{message}</p>}<div className="mt-5 flex gap-2"><button type="button" onClick={()=>setEditing(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm">取消</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-rose-600 py-3 text-sm font-semibold text-white">保存持仓</button></div></div></div>}
+   <div className="mt-5 text-center text-xs text-slate-400">累计盈亏为当前参考市值减持仓成本，不包含已卖出份额的历史已实现收益。行情缺失时不以零填充。</div>
   </div>
  </main>;
 }
