@@ -364,7 +364,7 @@ export default function FinancePage() {
                   const path = values.map((v,i) => (i===0?"M":"L") + (i/(values.length-1)*100).toFixed(1) + "," + (38-(v-lo)/range*34).toFixed(1)).join(" ");
                   return <svg viewBox="0 0 100 42" role="img" aria-label={item.code+" 今日估算涨跌动态，"+points.length+"个采样点"} className="h-11 w-24"><path d={path} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
                 })()}
-                <div className="text-right"><p className={`text-sm font-semibold tabular-nums ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"暂无法计算":(delta>=0?"+":"")+money(delta)}</p><p className="mt-1 text-xs text-slate-500">{e?.change==null?"估算涨跌暂无":(e.change>=0?"+":"")+e.change.toFixed(2)+"%"} · {e?.estimatedNav==null?"估算净值暂无":e.estimatedNav.toFixed(4)}</p></div>
+                <div className="min-w-[112px] text-right"><p className={`text-xl font-bold tabular-nums ${e?.change==null?"text-slate-400":e.change>=0?"text-rose-600":"text-emerald-600"}`}>{e?.change==null?"暂无估值":(e.change>0?"+":"")+e.change.toFixed(2)+"%"}</p><p className="mt-1 text-xs text-slate-500">估值 {e?.estimatedNav==null?"—":e.estimatedNav.toFixed(4)}</p><p className={`mt-1 text-xs font-semibold ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"未录入份额":("预估 "+(delta>=0?"+":"")+money(delta))}</p></div>
               </div>;
             })}
           </div>
