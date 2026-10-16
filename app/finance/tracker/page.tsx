@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../../components/FinanceHistory";
-import FinanceIndices from "../../components/FinanceIndices";
-import FinanceImageImport, { type Recognized } from "../../components/FinanceImageImport";
+import FinanceIndices from "../../../components/FinanceIndices";
+import FinanceImageImport, { type Recognized } from "../../../components/FinanceImageImport";
 import { supabase } from "../../../lib/supabase";
 
 type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
