@@ -4,7 +4,7 @@ import Link from "next/link";
 type Holding={quantity:number;cost:number};
 type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
-type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number};
+type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number;stocks?:{code:string;name:string;weight:number;change:number}[]};
 type Search={code:string;name:string;kind:"fund"|"stock"};
 type CurvePoint={at:number;change:number};
 const HOLDINGS_KEY="weis-finance-holdings";
