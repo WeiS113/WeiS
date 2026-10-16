@@ -30,15 +30,33 @@ async function publicHistory(code: string): Promise<Point[]> {
     return { date, close: Number(row?.y) };
   });
 }
+async function latestPublished(code:string):Promise<Point|null>{
+ const paths=["FundMNDetailInformation","FundMNBasicInformation"];
+ const results=await Promise.allSettled(paths.map(async path=>{
+  const u="https://fundmobapi.eastmoney.com/FundMNewApi/"+path+"?FCODE="+code+"&deviceid=weis&plat=Iphone&product=EFund&version=6.5.5";
+  const res=await fetch(u,{headers,cache:"no-store",signal:AbortSignal.timeout(6000)});
+  if(!res.ok)throw Error("latest NAV unavailable");
+  const d=(await res.json())?.Datas;
+  const date=String(d?.FSRQ??d?.JZRQ??"").replaceAll("/","-").slice(0,10);
+  const close=Number(d?.DWJZ);
+  if(String(d?.FCODE??code)!==code||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(close)||close<=0)throw Error("invalid dated NAV");
+  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+  if(date>today)throw Error("future NAV date");
+  return {date,close};
+ }));
+ return results.find((x):x is PromiseFulfilledResult<Point>=>x.status==="fulfilled")?.value??null;
+}
 export async function GET(request:NextRequest) {
   const code=(request.nextUrl.searchParams.get("code")||"").trim();
   if(!/^\d{6}$/.test(code))return NextResponse.json({error:"无效基金代码"},{status:400});
   try {
     // Independently request both published NAV feeds. A valid but stale mobile
     // response must never suppress a newer official NAV in the public feed.
-    const [mobile,publicFeed]=await Promise.allSettled([mobileHistory(code),publicHistory(code)]);
+    const [mobile,publicFeed,latest]=await Promise.allSettled([mobileHistory(code),publicHistory(code),latestPublished(code)]);
     const unique=new Map<string,Point>();
     const points=[...(publicFeed.status==="fulfilled"?publicFeed.value:[]),...(mobile.status==="fulfilled"?mobile.value:[])];
+    const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+    if(latest.status==="fulfilled"&&latest.value&&latest.value.date<=today)points.push(latest.value);
     for(const p of points)if(/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0)unique.set(p.date,p);
     const result=[...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-120);
     if(result.length<2)throw Error("No history");
