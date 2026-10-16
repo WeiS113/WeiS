@@ -11,7 +11,7 @@ type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number
 type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
 type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
-type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string; coverage?:number; disclosure?:string|null };
+type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string; coverage?:number; disclosure?:string|null; stocks?: {code:string;name:string;weight:number;change:number}[] };
 type EstimatePoint = { at: number; change: number };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const KEY = "weis-finance-watchlist";
@@ -376,6 +376,11 @@ export default function FinancePage() {
                     const line=values.map((v,k)=>(20+k/Math.max(1,values.length-1)*660).toFixed(1)+","+(170-(v-low)/range*140).toFixed(1)).join(" ");
                     return <svg viewBox="0 0 700 190" role="img" aria-label="基金盘中估算涨跌走势" className="mt-2 w-full"><line x1="20" x2="680" y1={170-(0-low)/range*140} y2={170-(0-low)/range*140} stroke="#94a3b8" strokeDasharray="4 4"/><polyline points={line} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
                   })()}
+                  {Array.isArray(e?.stocks)&&e.stocks.length>0&&<div className="mt-3 rounded-xl bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">重仓股 · 当日涨跌贡献</p><span className="text-xs text-slate-500">已披露持仓约 {e.coverage?.toFixed(1)}%</span></div>
+                    {e.stocks.map(s=><div key={s.code} className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-slate-50 py-2 text-xs"><span className="truncate">{s.name||s.code} <span className="text-slate-400">{s.code}</span></span><span className="tabular-nums text-slate-500">{s.weight.toFixed(1)}%</span><span className={s.change>=0?"font-medium tabular-nums text-rose-600":"font-medium tabular-nums text-emerald-600"}>{s.change>0?"+":""}{s.change.toFixed(2)}%</span></div>)}
+                    <p className="mt-2 text-[11px] leading-5 text-slate-400">仅展示估算引擎实际拿到的披露持仓与当日股票行情。披露可能滞后，并非基金当前全部持仓。</p>
+                  </div>}
                   <FinanceHistory code={item.code} kind="fund" />
                 </div>}
               </div>;
