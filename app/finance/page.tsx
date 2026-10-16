@@ -35,6 +35,7 @@ export default function FinancePage() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [chartCode, setChartCode] = useState<string | null>(null);
+  const [fundSort, setFundSort] = useState<"original"|"gain"|"loss">("original");
   const [view, setView] = useState<"holdings" | "watchlist" | "settings">("holdings");
   const refreshId = useRef(0);
 
@@ -348,8 +349,9 @@ export default function FinancePage() {
           <p className={`mt-4 text-3xl font-semibold tabular-nums ${estimatedDelta>=0?"text-rose-600":"text-emerald-600"}`}>{estimated.length?money(estimatedDelta):"—"}</p>
           <p className="mt-1 text-xs text-slate-400">{estimated.length?"已录入份额基金的估算当日收益":"尚未获得可计算收益的持仓；下方仍可查看单只基金估算涨跌"}</p>
           <p className="mt-2 text-xs text-slate-400">盘中走势从你打开本页面后开始记录，历史数据不会被虚构或回填。</p>
-          <div className="mt-4 divide-y divide-slate-100">
-            {items.filter(x=>x.kind==="fund").map(item=>{
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-slate-500">排序</span>{([{id:"original",name:"自选顺序"},{id:"gain",name:"涨幅优先"},{id:"loss",name:"跌幅优先"}] as const).map(s=><button type="button" key={s.id} onClick={()=>setFundSort(s.id)} className={`rounded-full px-3 py-1.5 ${fundSort===s.id?"bg-rose-50 font-semibold text-rose-700":"bg-slate-50 text-slate-500"}`}>{s.name}</button>)}</div>
+          <div className="mt-2 divide-y divide-slate-100">
+            {items.filter(x=>x.kind==="fund").sort((a,b)=>fundSort==="original"?0:fundSort==="gain"?(estimates[b.code]?.change??-Infinity)-(estimates[a.code]?.change??-Infinity):(estimates[a.code]?.change??Infinity)-(estimates[b.code]?.change??Infinity)).map(item=>{
               const h=holdings["fund"+item.code];const e=estimates[item.code];const q=quotes["fund"+item.code];
               const hasEstimate=e?.estimatedNav!=null&&e.estimatedNav>0&&q?.price!=null&&(h?.quantity??0)>0;
               const delta=hasEstimate?h!.quantity*(e!.estimatedNav!-q!.price!):null;
@@ -365,6 +367,17 @@ export default function FinancePage() {
                   return <svg viewBox="0 0 100 42" role="img" aria-label={item.code+" 今日估算涨跌动态，"+points.length+"个采样点"} className="h-11 w-24"><path d={path} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
                 })()}
                 <div className="min-w-[112px] text-right"><p className={`text-xl font-bold tabular-nums ${e?.change==null?"text-slate-400":e.change>=0?"text-rose-600":"text-emerald-600"}`}>{e?.change==null?"暂无估值":(e.change>0?"+":"")+e.change.toFixed(2)+"%"}</p><p className="mt-1 text-xs text-slate-500">估值 {e?.estimatedNav==null?"—":e.estimatedNav.toFixed(4)}</p><p className={`mt-1 text-xs font-semibold ${delta===null?"text-slate-400":delta>=0?"text-rose-600":"text-emerald-600"}`}>{delta===null?"未录入份额":("预估 "+(delta>=0?"+":"")+money(delta))}</p></div>
+                <button type="button" onClick={()=>setChartCode(chartCode==="fund"+item.code?null:"fund"+item.code)} className="basis-full rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-600">{chartCode==="fund"+item.code?"收起基金走势":"查看今日走势和历史净值"} ↓</button>
+                {chartCode==="fund"+item.code && <div className="w-full basis-full rounded-xl border border-slate-100 p-2">
+                  <p className="px-2 pt-2 text-sm font-medium">今日盘中估算走势</p>
+                  {(estimateSeries[item.code]||[]).length<2?<p className="p-5 text-center text-xs text-slate-400">正在等待至少两次不同的有效盘中采样</p>:(()=>{
+                    const points=estimateSeries[item.code]||[];
+                    const values=points.map(p=>p.change),low=Math.min(0,...values),high=Math.max(0,...values),range=Math.max(high-low,0.01);
+                    const line=values.map((v,k)=>(20+k/Math.max(1,values.length-1)*660).toFixed(1)+","+(170-(v-low)/range*140).toFixed(1)).join(" ");
+                    return <svg viewBox="0 0 700 190" role="img" aria-label="基金盘中估算涨跌走势" className="mt-2 w-full"><line x1="20" x2="680" y1={170-(0-low)/range*140} y2={170-(0-low)/range*140} stroke="#94a3b8" strokeDasharray="4 4"/><polyline points={line} fill="none" stroke={values[values.length-1]>=0?"#e11d48":"#059669"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+                  })()}
+                  <FinanceHistory code={item.code} kind="fund" />
+                </div>}
               </div>;
             })}
           </div>
