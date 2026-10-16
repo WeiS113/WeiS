@@ -28,6 +28,7 @@ function parseMoney(s:string){
  if(m)return Number(m[1])*(m[2]==="万"?10000:m[2]==="千"?1000:1);
  return chineseAmount(s);
 }
+function normalizeName(s:string){return s.replace(/[\s·（）()\-—]/g,"").replace(/(混合型?|股票型?|债券型?|指数型?|发起式|证券投资基金)/g,"").toLowerCase();}
 function extract(s:string,funds:Fund[]){
  const text=s.replace(/\s+/g,"").replace(/[，。！]/g,"");
  const verb=text.match(/买入|申购|加仓|卖出|赎回|减仓/);if(!verb)return null;
@@ -36,28 +37,44 @@ function extract(s:string,funds:Fund[]){
  const amount=parseMoney(after);if(!amount||amount<=0)return null;
  const date=parseDay(text);
  const code=text.match(/(?<!\d)\d{6}(?!\d)/)?.[0];
- const candidates=funds.filter(f=>code?f.code===code:(f.name&&text.includes(f.name))||(f.name?.length>=4&&text.includes(f.name.slice(0,4))));
- const fund=candidates.length===1?candidates[0]:null;
- return {side,amount,date,code:fund?.code??code??"",name:fund?.name??"",ambiguous:!fund,raw:after};
+ const phrase=after.replace(/(20\d{2}[年/-]\d{1,2}[月/-]\d{1,2}日?|\d{1,2}月\d{1,2}日?)/g,"").replace(/\d+(?:\.\d+)?(万|千)?元?/g,"").replace(/[零一二三四五六七八九十百千万两]+元/g,"").replace(/(基金|的|份额|金额)/g,"").trim();
+ const exact=funds.filter(f=>f.code===code||(!code&&(text.includes(f.name)||normalizeName(phrase)===normalizeName(f.name))));
+ const partial=funds.filter(f=>!code&&phrase.length>=2&&normalizeName(f.name).includes(normalizeName(phrase)));
+ const matches=exact.length?exact:partial;
+ const fund=matches.length===1?matches[0]:null;
+ return {side,amount,date,code:fund?.code??code??"",name:fund?.name??"",ambiguous:!fund,raw:after,query:phrase};
 }
 export default function VoiceFundTrade({funds,onApply}:{funds:Fund[];onApply:(trade:VoiceTrade)=>void}){
  const [open,setOpen]=useState(false),[listening,setListening]=useState(false),[utterance,setUtterance]=useState("");
  const [draft,setDraft]=useState<ReturnType<typeof extract>>(null),[fundCode,setFundCode]=useState(""),[nav,setNav]=useState<number|null>(null),[navDate,setNavDate]=useState(""),[status,setStatus]=useState(""),[saving,setSaving]=useState(false);
  const [hits,setHits]=useState<Fund[]>([]);
+ const [autoMatched,setAutoMatched]=useState(false);
  const recog=useRef<Recognition|null>(null);
  useEffect(()=>()=>{recog.current?.stop();},[]);
- function analyze(raw:string){setUtterance(raw);const d=extract(raw,funds);setDraft(d);setFundCode(d?.code??"");setNav(null);setNavDate("");setStatus(d?"请核对基金、日期、金额和最终成交净值。":"没识别出完整交易，请按“今天买入110022 1000元”修改文字。");}
+ function analyze(raw:string){setUtterance(raw);const d=extract(raw,funds);setDraft(d);setFundCode(d?.code??"");setAutoMatched(Boolean(d?.name));setHits([]);setNav(null);setNavDate("");setStatus(d?"请核对基金、日期、金额和最终成交净值。":"没识别出完整交易，请按“今天买入110022 1000元”修改文字。");}
  function start(){
   const w=window as RecognitionWindow;const R=w.SpeechRecognition??w.webkitSpeechRecognition;
   if(!R){setStatus("当前浏览器不支持语音识别，可直接输入交易指令。建议尝试 Chrome 或 Edge。");return;}
   try{const rec=new R();rec.lang="zh-CN";rec.continuous=false;rec.interimResults=false;rec.onresult=e=>{const phrase=e.results[0]?.[0]?.transcript??"";analyze(phrase);};rec.onerror=e=>{setStatus("语音识别失败："+e.error+"，可输入文字。");setListening(false);};rec.onend=()=>setListening(false);recog.current=rec;rec.start();setListening(true);setStatus("正在聆听，请说出基金、买卖方向、金额和日期…");}catch{setStatus("麦克风启动失败，请检查浏览器权限。");}
  }
  useEffect(()=>{
-  if(!draft?.raw||fundCode.length!==6)return;
-  let cancel=false;
-  void fetch("/api/finance/search?q="+fundCode,{cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{if(!cancel)setHits((Array.isArray(d?.results)?d.results:[]).filter((x:Fund&{kind:string})=>x.kind==="fund").slice(0,8));}).catch(()=>{});
-  return()=>{cancel=true};
- },[fundCode,draft?.raw]);
+  if(!draft||fundCode.length===6)return;
+  const query=draft.query;
+  if(!query||query.length<2)return;
+  let cancelled=false;
+  void fetch("/api/finance/search?q="+encodeURIComponent(query),{cache:"no-store"})
+   .then(async r=>r.ok?r.json():null)
+   .then(data=>{
+    if(cancelled)return;
+    const rows=((Array.isArray(data?.results)?data.results:[]) as (Fund&{kind:string})[]).filter(x=>x.kind==="fund"&&/^\d{6}$/.test(x.code));
+    setHits(rows.slice(0,8));
+    const exact=rows.filter(x=>normalizeName(x.name)===normalizeName(query));
+    if(exact.length===1){setFundCode(exact[0].code);setAutoMatched(true);setStatus("已自动匹配基金："+exact[0].name+"（"+exact[0].code+"），请确认。");}
+    else if(rows.length>0)setStatus("找到候选基金，请点选正确基金，避免误记账。");
+    else setStatus("现有持仓及公开基金目录均未找到唯一匹配，请输入六位基金代码。");
+   }).catch(()=>{if(!cancelled)setStatus("基金目录暂不可用，请核对代码。");});
+  return()=>{cancelled=true;};
+ },[draft?.query,draft?.date,draft?.amount,fundCode]);
  useEffect(()=>{
   if(!draft||!(/^\d{6}$/.test(fundCode))){setNav(null);setNavDate("");return;}
   let cancelled=false;setSaving(true);
@@ -89,7 +106,8 @@ export default function VoiceFundTrade({funds,onApply}:{funds:Fund[];onApply:(tr
   {draft&&<div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4 text-sm">
    <div className="flex justify-between"><span className="text-slate-500">交易类型</span><strong>{draft.side==="buy"?"买入 / 加仓":"卖出 / 减仓"}</strong></div>
    <div className="flex justify-between"><span className="text-slate-500">交易金额</span><strong>¥{draft.amount.toFixed(2)}</strong></div>
-   <label className="block text-xs text-slate-500">基金代码<input value={fundCode} onChange={e=>setFundCode(e.target.value.replace(/\D/g,"").slice(0,6))} inputMode="numeric" placeholder="确认六位基金代码" className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-900"/></label>
+   <label className="block text-xs text-slate-500">基金代码 {autoMatched&&<span className="ml-2 font-medium text-emerald-600">已自动匹配</span>}<input value={fundCode} onChange={e=>{setFundCode(e.target.value.replace(/\D/g,"").slice(0,6));setAutoMatched(false);}} inputMode="numeric" placeholder="未找到时手动输入六位代码" className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-900"/></label>
+   {hits.length>0&&<div className="max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white">{hits.map(f=><button type="button" key={f.code} onClick={()=>{setFundCode(f.code);setAutoMatched(true);setHits([]);}} className="flex w-full justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-xs"><span className="truncate">{f.name}</span><span className="font-semibold">{f.code}</span></button>)}</div>}
    <label className="block text-xs text-slate-500">交易日期<input type="date" max={today()} value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})} className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-900"/></label>
    <p className="text-xs text-slate-500">当日官方单位净值：<strong className="text-slate-800">{nav===null?"尚未取得":nav.toFixed(4)}</strong></p>
    {nav!==null&&<p className="text-xs text-slate-500">预估记账份额：{(draft.amount/nav).toFixed(2)} 份（未扣交易手续费）</p>}
