@@ -22,7 +22,7 @@ async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
   const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
   const datePart=time?.replaceAll("/","-").match(/^20\d{2}-\d{2}-\d{2}/)?.[0];
   const source=datePart&&datePart!==day?"天天基金历史时点估算（非今日实时）":"天天基金盘中估算（非官方净值）";
-  const isOld=Boolean(datePart&&datePart!==day);
+  const isOld=!datePart||datePart!==day;
   const change=!isOld&&percent!==null&&Math.abs(percent)<=100?percent:null;
   const estimatedNav=!isOld&&n!==null&&n>0&&n<10000?n:change!==null&&baseline!==null&&baseline>0?baseline*(1+change/100):null;
   result.set(code,{code,name:typeof x.SHORTNAME==="string"?x.SHORTNAME:undefined,estimatedNav,change,time,source,diagnostic:estimatedNav===null?"直接估值接口未提供有效 GSZ / GSZZL":undefined});
