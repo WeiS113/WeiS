@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FinanceHistory from "../../components/FinanceHistory";
+import FinanceImageImport, { type Recognized } from "../../components/FinanceImageImport";
 import { supabase } from "../../lib/supabase";
 
 type Quote = { code: string; name: string; kind: "stock" | "fund"; price: number | null; change: number | null; time: string | null; source: string };
 type Saved = { code: string; kind: "stock" | "fund" };
 type Holding = { quantity: number; cost: number };
 type SearchResult = { code: string; name: string; kind: "stock" | "fund" };
+type Estimate = { estimatedNav: number | null; change: number | null; time: string | null; source: string };
 const HOLDINGS_KEY = "weis-finance-holdings";
 const KEY = "weis-finance-watchlist";
 const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kind: "stock" }, { code: "110022", kind: "fund" }];
@@ -16,6 +18,7 @@ const START: Saved[] = [{ code: "600519", kind: "stock" }, { code: "510300", kin
 export default function FinancePage() {
   const [items, setItems] = useState<Saved[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
   const [holdingReady, setHoldingReady] = useState(false);
   const [input, setInput] = useState("");
@@ -28,6 +31,7 @@ export default function FinancePage() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [chartCode, setChartCode] = useState<string | null>(null);
+  const [view, setView] = useState<"holdings" | "watchlist" | "settings">("holdings");
   const refreshId = useRef(0);
 
   useEffect(() => {
@@ -82,6 +86,24 @@ export default function FinancePage() {
   }, [items]);
 
   useEffect(() => { void refresh(); const t = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60000); return () => { clearInterval(t); refreshId.current += 1; }; }, [refresh]);
+
+  useEffect(() => {
+    const funds = items.filter(x => x.kind === "fund");
+    let cancelled = false;
+    async function fetchEstimates() {
+      if (funds.length === 0) { if (!cancelled) setEstimates({}); return; }
+      const rows = await Promise.all(funds.map(async x => {
+        try {
+          const res = await fetch("/api/finance/estimate?code=" + encodeURIComponent(x.code), { cache: "no-store" });
+          return [x.code, res.ok ? await res.json() as Estimate : { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const;
+        } catch { return [x.code, { estimatedNav:null, change:null, time:null, source:"暂不可用" }] as const; }
+      }));
+      if (!cancelled) setEstimates(Object.fromEntries(rows));
+    }
+    void fetchEstimates();
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void fetchEstimates(); }, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [items]);
 
   useEffect(() => {
     const q = input.trim();
@@ -216,6 +238,19 @@ export default function FinancePage() {
     } catch (error) { setSyncMessage(error instanceof Error ? error.message : "导入失败"); }
   }
 
+  function importRecognized(rows: Recognized[]) {
+    const nextItems = [...items];
+    const nextHoldings = { ...holdings };
+    for (const row of rows) {
+      if (!Number.isFinite(row.quantity) || !Number.isFinite(row.cost) || row.quantity === null || row.cost === null || row.quantity < 0 || row.cost < 0) continue;
+      const key = row.kind + row.code;
+      if (!nextItems.some(x => x.kind + x.code === key)) nextItems.push({ kind: row.kind, code: row.code });
+      nextHoldings[key] = { quantity: row.quantity, cost: row.cost };
+    }
+    setItems(nextItems); setHoldings(nextHoldings);
+    localStorage.setItem(KEY, JSON.stringify(nextItems));
+    localStorage.setItem(HOLDINGS_KEY, JSON.stringify(nextHoldings));
+  }
   function updateItems(next: Saved[]) { setItems(next); localStorage.setItem(KEY, JSON.stringify(next)); }
   function addResult(result: Saved) {
     if (items.some(x => x.code === result.code && x.kind === result.kind)) { setMessage("已在自选列表中"); return; }
@@ -230,30 +265,23 @@ export default function FinancePage() {
 
   return (
     <main className="min-h-screen bg-[#f4f5f9] px-4 py-8 text-slate-800 sm:px-8">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">← 返回 WeiS</Link>
-        <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">个人股票 · ETF · 基金自选行情</p></div>
+        <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+          <div><p className="text-xs tracking-[.3em] text-slate-400">YOUR PERSONAL SPACE</p><h1 className="mt-2 text-4xl font-semibold">Finance</h1><p className="mt-2 text-sm text-slate-500">资产总览 · 持仓分析 · 基金净值</p></div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-2xl bg-white/80 px-5 py-3 text-sm shadow-sm disabled:opacity-50">{loading ? "更新中…" : "↻ 刷新行情"}</button>
         </div>
-        <section className="mt-7 rounded-2xl border border-white/90 bg-white/75 p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-sm font-semibold">跨设备数据同步</h2><p className="mt-1 text-xs text-slate-500">手动上传当前浏览器的数据，或从云端覆盖恢复；首次使用需先在 Supabase 执行建表脚本。</p></div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={syncBusy} onClick={() => void syncToCloud()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">上传到云端</button>
-              <button type="button" disabled={syncBusy} onClick={() => void restoreFromCloud()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm disabled:opacity-50">从云端恢复</button>
-              <button type="button" onClick={exportBackup} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导出本地备份</button>
-              <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导入本地备份<input type="file" accept="application/json,.json" onChange={event => void importBackup(event)} className="hidden" /></label>
-            </div>
-          </div>
-          {syncMessage && <p role="status" className="mt-3 text-xs text-slate-600">{syncMessage}</p>}
-        </section>
-        <section className="mt-5 grid gap-3 sm:grid-cols-3">
+        <section className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已录入持仓成本</p><p className="mt-2 text-xl font-semibold tabular-nums">{money(totalCost)}</p></div>
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的持仓市值</p><p className="mt-2 text-xl font-semibold tabular-nums">{hasQuotedPositions ? money(totalMarket) : "—"}</p></div>
           <div className="rounded-2xl bg-white/80 p-5 shadow-sm"><p className="text-xs text-slate-400">已获取报价的浮动盈亏</p><p className={`mt-2 text-xl font-semibold tabular-nums ${totalMarket - knownCost >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{hasQuotedPositions ? money(totalMarket - knownCost) : "—"}</p></div>
         </section>
         {hasMissingPrice && <p className="mt-2 text-xs text-amber-700">部分持仓没有可用报价，市值和盈亏仅计算已获取报价的部分。</p>}
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">场外基金的参考市值按<strong className="text-slate-700">最近公布的单位净值</strong>计算。盘中估算单独展示，只供参考，可能缺失或延迟，绝不是当日官方净值。点击资产旁「查看走势」可查看历史净值；数据源出错时图表会显示错误提示。</div>
+        <nav aria-label="Finance 页面分类" className="mt-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-3">
+          {([{ id: "holdings", text: "我的持仓" }, { id: "watchlist", text: "自选与搜索" }, { id: "settings", text: "导入与同步" }] as const).map(tab => <button key={tab.id} type="button" onClick={() => setView(tab.id)} className={`whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-medium ${view === tab.id ? "bg-slate-900 text-white" : "bg-white/80 text-slate-600"}`}>{tab.text}</button>)}
+        </nav>
+        {view === "watchlist" && <div>
         <section className="mt-5 rounded-[28px] border border-white/90 bg-white/75 p-5 shadow-sm backdrop-blur-xl sm:p-7">
           <h2 className="text-lg font-medium">添加自选</h2>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -269,12 +297,29 @@ export default function FinancePage() {
           <p className="mt-3 text-xs text-slate-400">可按名称或代码搜索并选择结果，也可输入6位代码后直接添加；搜索结果来自第三方接口。</p>
           {message && <p role="status" className="mt-3 text-sm text-amber-700">{message}</p>}
         </section>
+        </div>}
+        {view === "settings" && <div>
+          <FinanceImageImport onImport={importRecognized} />
+        <section className="mt-7 rounded-2xl border border-white/90 bg-white/75 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-sm font-semibold">跨设备数据同步</h2><p className="mt-1 text-xs text-slate-500">手动上传当前浏览器的数据，或从云端覆盖恢复；首次使用需先在 Supabase 执行建表脚本。</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={syncBusy} onClick={() => void syncToCloud()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">上传到云端</button>
+              <button type="button" disabled={syncBusy} onClick={() => void restoreFromCloud()} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm disabled:opacity-50">从云端恢复</button>
+              <button type="button" onClick={exportBackup} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导出本地备份</button>
+              <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm">导入本地备份<input type="file" accept="application/json,.json" onChange={event => void importBackup(event)} className="hidden" /></label>
+            </div>
+          </div>
+          {syncMessage && <p role="status" className="mt-3 text-xs text-slate-600">{syncMessage}</p>}
+        </section>
+        </div>}
+        {(view === "holdings" || view === "watchlist") && <>
         <section className="mt-6 overflow-hidden rounded-[28px] border border-white/90 bg-white/75 shadow-sm backdrop-blur-xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">我的自选 <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 sm:px-7"><h2 className="text-lg font-medium">{view === "holdings" ? "我的资产" : "我的自选"} <span className="text-sm font-normal text-slate-400">({items.length})</span></h2><span className="text-xs text-slate-400">60秒自动刷新 {lastRefresh && "· 页面刷新 " + lastRefresh}</span></div>
           {items.length === 0 ? <p className="p-8 text-center text-slate-400">还没有自选，输入代码添加</p> : <div className="divide-y divide-slate-100">
             {items.map(item => { const q = quotes[item.kind + item.code]; const change = q?.change; return <div key={item.kind + item.code} className="flex flex-wrap items-center gap-3 px-5 py-4 sm:px-7">
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}</p></div>
-              <div className="text-right"><p className="font-semibold tabular-nums">{q?.price == null ? "—" : q.price.toFixed(4)}</p><p className={`mt-1 text-sm font-medium tabular-nums ${change == null ? "text-slate-400" : change >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{change == null ? "—" : (change > 0 ? "+" : "") + change.toFixed(2) + "%"}</p><p className="text-[10px] text-slate-400">{q?.time || "暂无更新时间"}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{q?.name || item.code}</p><p className="mt-1 text-xs text-slate-400">{item.code} · {item.kind === "fund" ? "场外基金" : "股票 / ETF"} · {q?.source || "等待行情"}{item.kind === "fund" && " · 已公布净值"}</p></div>
+              <div className="text-right"><p className="font-semibold tabular-nums">{q?.price == null ? "—" : q.price.toFixed(4)}</p><p className={`mt-1 text-sm font-medium tabular-nums ${change == null ? "text-slate-400" : change >= 0 ? "text-rose-600" : "text-emerald-600"}`}>{change == null ? "—" : (change > 0 ? "+" : "") + change.toFixed(2) + "%"}</p><p className="text-[10px] text-slate-400">{q?.time || "暂无更新时间"}</p>{item.kind === "fund" && <p className="mt-1 text-xs text-amber-700">盘中估算：{estimates[item.code]?.estimatedNav == null ? "暂无" : estimates[item.code].estimatedNav!.toFixed(4)}{estimates[item.code]?.change == null ? "" : " / " + estimates[item.code].change!.toFixed(2) + "%"} <span className="text-slate-400">{estimates[item.code]?.time || ""}</span></p>}</div>
               {<button type="button" onClick={() => setChartCode(chartCode === item.kind + item.code ? null : item.kind + item.code)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">{chartCode === item.kind + item.code ? "收起走势" : "查看走势"}</button>}
               <button aria-label={`移除 ${item.code}`} title="移除自选" onClick={() => updateItems(items.filter(x => !(x.code === item.code && x.kind === item.kind)))} className="ml-2 rounded-lg px-2 py-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600">✕</button>
               <div className="basis-full grid grid-cols-2 gap-3 pt-2 sm:ml-auto sm:basis-auto sm:w-[310px]"><label className="text-xs text-slate-500">持有份额 / 股数<input aria-label={`${item.code} 持有份额或股数`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.quantity ?? 0} onChange={e => setHolding(item.kind + item.code, "quantity", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label><label className="text-xs text-slate-500">单位成本（元）<input aria-label={`${item.code} 单位成本`} type="number" min="0" step="any" value={holdings[item.kind + item.code]?.cost ?? 0} onChange={e => setHolding(item.kind + item.code, "cost", e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800" /></label></div>
@@ -282,6 +327,7 @@ export default function FinancePage() {
           </div>}
         </section>
         {chartCode && items.some(item => item.kind + item.code === chartCode) && <FinanceHistory code={chartCode.replace(/^(stock|fund)/, "")} kind={chartCode.startsWith("fund") ? "fund" : "stock"} />}
+        </>}
         <p className="mt-6 text-xs leading-6 text-slate-400">行情仅供个人参考，不构成投资建议。A股和ETF报价可能延迟；场外基金展示最近公布的官方净值及对应日涨跌，不属于盘中实时估值。第三方接口可能限流或中断，自选和成本数据暂保存在当前浏览器中；当前盈亏未计手续费、分红及税费。</p>
       </div>
     </main>
