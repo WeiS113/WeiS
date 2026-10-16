@@ -1,7 +1,7 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string };
+type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string };
 const numeric=(v:unknown)=>v==null||v===""||v==="-"?null:Number.isFinite(Number(v))?Number(v):null;
 function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
@@ -18,12 +18,14 @@ async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
  for(const x of records(await res.json())){
   const code=String(x.FCODE);
   if(!codes.includes(code))continue;
-  const n=numeric(x.GSZ),percent=numeric(x.GSZZL),time=typeof x.GZTIME==="string"&&x.GZTIME.length<=32?x.GZTIME:null;
+  const n=numeric(x.GSZ),percent=numeric(x.GSZZL),baseline=numeric(x.NAV),time=typeof x.GZTIME==="string"&&x.GZTIME.length<=32?x.GZTIME:null;
   const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
   const datePart=time?.replaceAll("/","-").match(/^20\d{2}-\d{2}-\d{2}/)?.[0];
   const source=datePart&&datePart!==day?"天天基金历史时点估算（非今日实时）":"天天基金盘中估算（非官方净值）";
   const isOld=Boolean(datePart&&datePart!==day);
-  result.set(code,{code,name:typeof x.SHORTNAME==="string"?x.SHORTNAME:undefined,estimatedNav:!isOld&&n!==null&&n>0&&n<10000?n:null,change:!isOld&&percent!==null&&Math.abs(percent)<=100?percent:null,time,source});
+  const change=!isOld&&percent!==null&&Math.abs(percent)<=100?percent:null;
+  const estimatedNav=!isOld&&n!==null&&n>0&&n<10000?n:change!==null&&baseline!==null&&baseline>0?baseline*(1+change/100):null;
+  result.set(code,{code,name:typeof x.SHORTNAME==="string"?x.SHORTNAME:undefined,estimatedNav,change,time,source,diagnostic:estimatedNav===null?"直接估值接口未提供有效 GSZ / GSZZL":undefined});
  }
  return result;
 }
@@ -42,8 +44,15 @@ export async function GET(request:NextRequest){
   }catch{ /* continue to domestic mirror */ }
  }
  const needFallback=codes.filter(code=>found.get(code)?.estimatedNav==null).slice(0,12);
- const fallback=await Promise.all(needFallback.map(async code=>({code,value:await estimateFromHoldings(code)})));
- for(const x of fallback){if(x.value)found.set(x.code,x.value);}
+ const fallback=await Promise.all(needFallback.map(async code=>{
+  let reason="备用模型未返回结果";
+  const value=await estimateFromHoldings(code, message=>{reason=message;});
+  return {code,value,reason};
+ }));
+ for(const x of fallback){if(x.value)found.set(x.code,x.value);else {
+  const old=found.get(x.code);
+  found.set(x.code,{code:x.code,name:old?.name,estimatedNav:null,change:null,time:old?.time??null,source:"盘中估算暂不可用",diagnostic:x.reason});
+ }}
  const results=codes.map(code=>found.get(code)??{code,estimatedNav:null,change:null,time:null,source:"数据源无可用盘中估算"});
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
  return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
