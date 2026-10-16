@@ -39,7 +39,7 @@ async function latestPublished(code:string):Promise<Point|null>{
   const d=(await res.json())?.Datas;
   const date=String(d?.FSRQ??d?.JZRQ??"").replaceAll("/","-").slice(0,10);
   const close=Number(d?.DWJZ);
-  if(String(d?.FCODE??code)!==code||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(close)||close<=0)throw Error("invalid dated NAV");
+  if(String(d?.FCODE??code)!==code||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(close)||close<=0)throw Error("invalid dated NAV");
   const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
   if(date>today)throw Error("future NAV date");
   return {date,close};
