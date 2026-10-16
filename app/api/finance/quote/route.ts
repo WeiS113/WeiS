@@ -8,9 +8,9 @@ function num(v: unknown): number | null {
 }
 function quoteTime(v: unknown): string | null {
   const s = String(v ?? "");
-  if (/^\\d{12,14}$/.test(s) && /^20\\d{2}/.test(s))
+  if (/^\d{12,14}$/.test(s) && /^20\d{2}/.test(s))
     return s.slice(0,4) + "-" + s.slice(4,6) + "-" + s.slice(6,8) + " " + s.slice(8,10) + ":" + s.slice(10,12);
-  if (/^\\d{10}$/.test(s)) {
+  if (/^\d{10}$/.test(s)) {
     const d = new Date(Number(s) * 1000);
     return Number.isNaN(d.getTime()) ? null : d.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
   }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       if (!res.ok) throw new Error("Quote provider error");
       const data = (await res.json())?.data;
       if (!data?.f57) throw new Error("Symbol not found");
-      result = { code, name: String(data.f58 || code), kind, price: num(data.f43), change: num(data.f170), time: quoteTime(data.f86), source: "第三方行情（可能延迟）" };
+      result = { code, name: String(data.f58 || code), kind, price: num(data.f43) !== null && num(data.f43)! > 0 ? num(data.f43) : null, change: num(data.f170), time: quoteTime(data.f86), source: "第三方行情（可能延迟）" };
     }
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
