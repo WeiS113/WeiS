@@ -34,6 +34,7 @@ export default function FinancePage(){
  const [loading,setLoading]=useState(false);
  const [curves,setCurves]=useState<Record<string,CurvePoint[]>>({});
  const [platformCurves,setPlatformCurves]=useState<Record<string,CurvePoint[]>>({});
+ const [platformDetails,setPlatformDetails]=useState<Record<string,string>>({});
  const [expanded,setExpanded]=useState<string|null>(null);
 
  const [updated,setUpdated]=useState("");
@@ -118,12 +119,12 @@ export default function FinancePage(){
   const pull=async()=>{
    const results=await Promise.all(codes.slice(0,30).map(async code=>{
     try{const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
-     if(!r.ok)return {code,points:[] as CurvePoint[]};
+     if(!r.ok)return {code,points:[] as CurvePoint[],detail:"分时服务请求失败"};
      const d=await r.json();
-     return {code,points:Array.isArray(d.points)?(d.points as CurvePoint[]):[]};
-    }catch{return {code,points:[] as CurvePoint[]};}
+     return {code,points:Array.isArray(d.points)?(d.points as CurvePoint[]):[],detail:Array.isArray(d.details)?d.details.map((x:{provider:string;status:string;count:number})=>x.provider+"："+x.status+"（"+x.count+" 点）").join("；"):"无平台诊断信息"};
+    }catch{return {code,points:[] as CurvePoint[],detail:"网络错误，无法获取平台分时数据"};}
    }));
-   if(active)setPlatformCurves(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.points]))}));
+   if(active){setPlatformCurves(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.points]))}));setPlatformDetails(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.detail]))}));}
   };
   void pull();const timer=setInterval(()=>void pull(),180000);
   return()=>{active=false;clearInterval(timer);};
@@ -271,7 +272,7 @@ export default function FinancePage(){
           <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
         </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
         <p className="mt-2 text-[11px] text-amber-700">基金平台分时估值：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。平台没有提供的时段留空。</p></>;
-      })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">基金平台未返回足够的当日分时估值数据；不会使用本机采样冒充平台全天走势。</p>}</div>
+      })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">基金平台未返回足够的当日分时估值数据；不会使用本机采样冒充平台全天走势。{platformDetails[x.code]&&<span className="mt-2 block text-amber-700">{platformDetails[x.code]}</span>}</p>}</div>
       {x.stocks.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer text-slate-600">披露重仓股 · 覆盖 {x.coverage??"—"}%</summary><div className="mt-2 space-y-2">{x.stocks.map(s=><div key={s.code} className="flex justify-between gap-2"><span>{s.name} {s.code}</span><span>{s.weight.toFixed(2)}% · {signed(s.change)}</span></div>)}</div></details>}
       {issues[x.code]&&<details className="mt-3 text-xs text-amber-700"><summary className="cursor-pointer">盘中估算暂不可用 · 查看原因</summary><p className="mt-2">{issues[x.code]}</p></details>}
       <div className="mt-4 flex items-center gap-2 border-t border-slate-200 pt-3"><button type="button" onClick={()=>edit(x.code)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-600">编辑持仓</button><Link href={"/finance/fund/"+x.code} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">历史净值</Link><button type="button" onClick={()=>remove(x.code)} className="ml-auto text-xs text-slate-400">移除</button></div>
