@@ -30,7 +30,7 @@ async function mobile(code:string):Promise<Point[]>{
  const rows=Array.isArray(json?.Datas)?json.Datas:[];
  const expansion=json?.Expansion??{};
  const base=Number(expansion.DWJZ);
- const rawDate=String(expansion.GZTIME??"").replaceAll("/","-").slice(0,10);
+ const rawDate=String(expansion.GZTIME??json?.GZTIME??"").replaceAll("/","-").slice(0,10);
  if(!Number.isFinite(base)||base<=0||rawDate!==localDate(Date.now()))return [];
  const parsed=rows.map((s:unknown)=>{
   if(typeof s!=="string")return null;
@@ -51,5 +51,6 @@ export async function GET(request:NextRequest){
  const first=feeds[0].status==="fulfilled"?feeds[0].value:[];
  const second=feeds[1].status==="fulfilled"?feeds[1].value:[];
  const points=first.length>=second.length?first:second;
- return NextResponse.json({code,points,source:points.length?(first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"无可用的当日分时估值数据",available:points.length>=2},{headers:{"Cache-Control":"no-store"}});
+ const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"请求或解析失败":first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"请求或解析失败":second.length>=2?"有效":"未返回当天有效分时点",count:second.length}];
+ return NextResponse.json({code,points,source:points.length?(first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"基金平台未提供可验证的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
 }
