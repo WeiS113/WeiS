@@ -25,6 +25,22 @@ function marketOpen(){
  const m=Number(hhmm.slice(0,2))*60+Number(hhmm.slice(3,5));
  return (m>=570&&m<=690)||(m>=780&&m<=900);
 }
+async function fallbackFundGz(code){
+ try{
+  const url="https://fundgz.1234567.com.cn/js/"+code+".js?rt="+Date.now();
+  const r=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0","Referer":"https://fund.eastmoney.com/"},signal:AbortSignal.timeout(7000)});
+  if(!r.ok)return null;
+  const body=await r.text();
+  const m=body.match(/jsonpgz\((\{[\s\S]*?\})\)\s*;?/);
+  if(!m)return null;
+  const d=JSON.parse(m[1]);
+  const today=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const time=String(d.gztime||"");
+  const nav=Number(d.gsz),change=Number(d.gszzl);
+  if(String(d.fundcode||"")!==code||!time.replaceAll("/","-").startsWith(today)||!Number.isFinite(nav)||nav<=0||!Number.isFinite(change)||Math.abs(change)>100)return null;
+  return {estimatedNav:nav,change,time,source:"天天基金 fundgz 备用估值（非官方净值）",model:"fundgz-fallback"};
+ }catch(err){console.warn("fundgz fallback failed",code,String(err));return null;}
+}
 async function collect(env){
  if(!marketOpen())return;
  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.WEIS_SITE_URL)throw Error("Missing Worker secrets");
@@ -43,13 +59,20 @@ async function collect(env){
    url.searchParams.set("code",code);
    const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});
    if(!r.ok){console.warn("estimate endpoint failed",code,r.status,(await r.text()).slice(0,240));return;}
-   const q=await r.json();
-   const nav=Number(q.estimatedNav),change=Number(q.change);
-   const time=typeof q.time==="string"?q.time:"";
+   let q=null;
+   try{q=await r.json();}catch{console.warn("estimate JSON parse failed",code);}
    const today=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-   if(!Number.isFinite(nav)||nav<=0||!Number.isFinite(change)||!time.replaceAll("/","-").startsWith(today)){console.log("estimate skipped",code,{time,expectedDate:today,nav:q.estimatedNav,change:q.change,source:q.source||null});return;}
+   let nav=Number(q?.estimatedNav),change=Number(q?.change);
+   let time=typeof q?.time==="string"?q.time:"";
+   let source=String(q?.source||"unknown"),model=String(q?.model||"direct");
+   if(!Number.isFinite(nav)||nav<=0||!Number.isFinite(change)||!time.replaceAll("/","-").startsWith(today)){
+    console.warn("site estimate invalid; trying fundgz fallback",code,{time,expectedDate:today,nav:q?.estimatedNav,change:q?.change,source:q?.source||null});
+    const backup=await fallbackFundGz(code);
+    if(!backup){console.log("estimate skipped",code,{time,expectedDate:today,nav:q?.estimatedNav,change:q?.change,source:q?.source||null});return;}
+    nav=backup.estimatedNav;change=backup.change;time=backup.time;source=backup.source;model=backup.model;
+   }
    const at=new Date(Math.floor(Date.now()/300000)*300000).toISOString();
-   const payload={code,at,nav,change_percent:change,source:String(q.source||"unknown").slice(0,160),model:String(q.model||"direct").slice(0,70)};
+   const payload={code,at,nav,change_percent:change,source:source.slice(0,160),model:model.slice(0,70)};
    const saved=await fetch(api+"/finance_intraday_points?on_conflict=code,at,model",{method:"POST",headers:{...headers,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)});
    console.log("estimate candidate",code,{nav,change,time,source:payload.source,model:payload.model});
    if(!saved.ok)throw Error("Supabase insert "+saved.status+" "+(await saved.text()).slice(0,180));
