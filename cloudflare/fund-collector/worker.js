@@ -42,7 +42,7 @@ async function collect(env){
    const nav=Number(q.estimatedNav),change=Number(q.change);
    const time=typeof q.time==="string"?q.time:"";
    const today=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-   if(!Number.isFinite(nav)||nav<=0||!Number.isFinite(change)||!time.startsWith(today))continue;
+   if(!Number.isFinite(nav)||nav<=0||!Number.isFinite(change)||!time.startsWith(today))return;
    const at=new Date(Math.floor(Date.now()/300000)*300000).toISOString();
    const payload={code,at,nav,change_percent:change,source:String(q.source||"unknown").slice(0,160),model:String(q.model||"direct").slice(0,70)};
    const saved=await fetch(api+"/finance_intraday_points?on_conflict=code,at,model",{method:"POST",headers:{...headers,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)});
