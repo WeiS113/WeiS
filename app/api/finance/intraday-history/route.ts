@@ -101,15 +101,63 @@ async function bondProxyCurve(code:string):Promise<Point[]>{
   return {at,nav:base*(1+change/100),change};
  });
 }
+async function databasePoints(code:string):Promise<Point[]>{
+ const base=process.env.NEXT_PUBLIC_SUPABASE_URL;
+ const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+ if(!base||!key)throw Error("Supabase public URL/key not configured");
+ const today=localDate(Date.now());
+ const start=Date.parse(today+"T00:00:00+08:00");
+ const end=start+24*60*60*1000;
+ const url=new URL(base.replace(/\\/$/,"")+"/rest/v1/finance_intraday_points");
+ url.searchParams.set("select","code,at,nav,change_percent,source,model");
+ url.searchParams.set("code","eq."+code);
+ url.searchParams.set("at","gte."+new Date(start).toISOString());
+ url.searchParams.append("at","lt."+new Date(end).toISOString());
+ url.searchParams.set("order","at.asc");
+ url.searchParams.set("limit","320");
+ const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(5500),headers:{apikey:key,Authorization:"Bearer "+key,Accept:"application/json"}});
+ if(!res.ok)throw Error("Supabase intraday read HTTP "+res.status);
+ const rows=await res.json();
+ if(!Array.isArray(rows))throw Error("Supabase intraday response is not an array");
+ const output=new Map<number,Point>();
+ for(const row of rows){
+  const at=Date.parse(String(row?.at??""));
+  const nav=Number(row?.nav);
+  if(!Number.isFinite(at)||!Number.isFinite(nav)||nav<=0||localDate(at)!==today)continue;
+  const m=minute(at);
+  if(!((m>=570&&m<=690)||(m>=780&&m<=900)))continue;
+  output.set(at,{at,nav,change:Number.isFinite(Number(row?.change_percent))?Number(row.change_percent):0});
+ }
+ return [...output.values()].sort((a,b)=>a.at-b.at).slice(-320);
+}
 export async function GET(request:NextRequest){
  const code=request.nextUrl.searchParams.get("code")??"";
- if(!/^\d{6}$/.test(code))return NextResponse.json({error:"invalid code"},{status:400});
- const feeds=await Promise.allSettled([pingzhong(code),mobile(code),bondProxyCurve(code)]);
- const first=feeds[0].status==="fulfilled"?feeds[0].value:[];
- const second=feeds[1].status==="fulfilled"?feeds[1].value:[];
- const proxy=feeds[2].status==="fulfilled"?feeds[2].value:[];
- const points=first.length>=second.length&&first.length>=proxy.length?first:second.length>=proxy.length?second:proxy;
- const reason=(i:number)=>{const r=feeds[i];if(r.status!=="rejected")return "";const e=r.reason;const message=e instanceof Error?e.message:String(e);return message.slice(0,140);};
- const details=[{provider:"天天基金分时",status:feeds[0].status==="rejected"?"失败："+reason(0):first.length>=2?"有效":"未返回当天有效分时点",count:first.length},{provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"失败："+reason(1):second.length>=2?"有效":"未返回当天有效分时点",count:second.length},{provider:"债基 ETF 分时代理",status:feeds[2].status==="rejected"?"失败："+reason(2):proxy.length>=2?"有效":"无对应代理",count:proxy.length}];
- return NextResponse.json({code,points,source:points.length?(points===proxy?"债基 ETF 分时基准代理（非基金实际净值）":first.length>=second.length?"天天基金 Data_gzTrend":"东方财富估值分时"):"基金平台未提供可验证的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
+ if(!/^\\d{6}$/.test(code))return NextResponse.json({error:"invalid code"},{status:400});
+ const feeds=await Promise.allSettled([pingzhong(code),mobile(code),bondProxyCurve(code),databasePoints(code)]);
+ const values=feeds.map(f=>f.status==="fulfilled"?f.value:[]);
+ const [first,second,proxy,stored]=values;
+ const candidates=[
+  {points:first,source:"天天基金 Data_gzTrend"},
+  {points:second,source:"东方财富估值分时"},
+  {points:proxy,source:"债基 ETF 分时基准代理（非基金实际净值）"},
+  {points:stored,source:"Supabase 云端历史采样（Cloudflare 定时采集）"}
+ ];
+ // Prefer the densest validated full-day series. On equal point counts,
+ // persisted server-side history wins over request-time fallbacks.
+ candidates.sort((a,b)=>b.points.length-a.points.length||
+   Number(b.source.startsWith("Supabase"))-Number(a.source.startsWith("Supabase")));
+ const selected=candidates[0];
+ const points=selected.points;
+ const reason=(i:number)=>{
+  const r=feeds[i];
+  if(r.status!=="rejected")return "";
+  const e=r.reason;return (e instanceof Error?e.message:String(e)).slice(0,140);
+ };
+ const details=[
+  {provider:"天天基金分时",status:feeds[0].status==="rejected"?"失败："+reason(0):first.length>=2?"有效":"未返回当天有效分时点",count:first.length},
+  {provider:"东方财富移动分时",status:feeds[1].status==="rejected"?"失败："+reason(1):second.length>=2?"有效":"未返回当天有效分时点",count:second.length},
+  {provider:"债基 ETF 分时代理",status:feeds[2].status==="rejected"?"失败："+reason(2):proxy.length>=2?"有效":"无对应代理",count:proxy.length},
+  {provider:"Supabase 云端历史采样",status:feeds[3].status==="rejected"?"读取失败："+reason(3):stored.length>=2?"有效":"数据库暂无足够的当日采样点",count:stored.length}
+ ];
+ return NextResponse.json({code,points,source:points.length>=2?selected.source:"基金平台和云端数据库均未提供足够的当日分时数据",available:points.length>=2,details},{headers:{"Cache-Control":"no-store"}});
 }
