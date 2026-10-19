@@ -14,7 +14,10 @@ export default {
    fetch(base+"/finance_portfolios?select=codes",{headers}),
    fetch(base+"/finance_intraday_points?select=code,at&at=gte."+encodeURIComponent(startAt)+"&order=at.desc&limit=5",{headers})
   ]);
-  if(!pointsRes.ok||!portfoliosRes.ok||!todayRes.ok)return Response.json({ok:false,service:"weis-fund-collector",configured:true,database:pointsRes.ok&&todayRes.ok?"ok":"error_"+(!pointsRes.ok?pointsRes.status:todayRes.status),portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status},{status:503});
+  if(!pointsRes.ok||!portfoliosRes.ok||!todayRes.ok){
+   const [pointsError,portfoliosError,todayError]=await Promise.all([pointsRes.ok?Promise.resolve(""):pointsRes.clone().text(),portfoliosRes.ok?Promise.resolve(""):portfoliosRes.clone().text(),todayRes.ok?Promise.resolve(""):todayRes.clone().text()]);
+   return Response.json({ok:false,service:"weis-fund-collector",configured:true,supabase_host:new URL(env.SUPABASE_URL).host,database:pointsRes.ok&&todayRes.ok?"ok":"error_"+(!pointsRes.ok?pointsRes.status:todayRes.status),portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status,details:{intraday_table:pointsRes.ok?"ok":pointsError.slice(0,500),portfolios_table:portfoliosRes.ok?"ok":portfoliosError.slice(0,500),today_query:todayRes.ok?"ok":todayError.slice(0,500)},hint:"根据 details 中的 PostgREST 错误代码确认是 URL/项目不匹配、表未创建，还是 API schema 暴露问题。不要发送 service_role 密钥。"},{status:503});
+  }
   const latestRows=await pointsRes.json(),portfolioRows=await portfoliosRes.json(),todayRows=await todayRes.json();
   const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))];
   const hhmm=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date());
