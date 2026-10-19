@@ -3,6 +3,7 @@ import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
 import {useParams} from "next/navigation";
 type Point={date:string;close:number};
+type IntradayPoint={at:number;nav:number;change:number};
 type Estimate={estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string};
 function rate(a:number,b:number){return b>0?(a/b-1)*100:null;}
 function fmt(v:number|null){return v===null?"—":(v>0?"+":"")+v.toFixed(2)+"%";}
@@ -13,6 +14,8 @@ export default function FundDetails(){
  const [name,setName]=useState(code),[points,setPoints]=useState<Point[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState(true);
  const [span,setSpan]=useState(90),[metric,setMetric]=useState<"monthly"|"quarterly"|"yearly">("monthly");
  const [estimate,setEstimate]=useState<Estimate|null>(null);
+ const [intraday,setIntraday]=useState<IntradayPoint[]>([]);
+ const [intradayStatus,setIntradayStatus]=useState("正在获取当日分时数据…");
  const [estimatedAt,setEstimatedAt]=useState("");
  const [dailyLimit,setDailyLimit]=useState(10);
  const [heldShares,setHeldShares]=useState<number|null>(null);
@@ -30,6 +33,21 @@ export default function FundDetails(){
    setPoints(valid);
    if(valid.length<2)setError("当前基金没有足够的历史净值数据");
   }).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};
+ },[code]);
+ useEffect(()=>{
+  if(!/^\d{6}$/.test(code))return;
+  let active=true;
+  const refresh=async()=>{
+   try{
+    const response=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
+    if(!response.ok)throw Error("分时接口 HTTP "+response.status);
+    const data=await response.json();
+    const rows=Array.isArray(data.points)?data.points.map((p:Record<string,unknown>)=>({at:Number(p.at),nav:Number(p.nav),change:Number(p.change)})).filter((p:IntradayPoint)=>Number.isFinite(p.at)&&Number.isFinite(p.nav)&&p.nav>0&&Number.isFinite(p.change)): [];
+    if(active){setIntraday(rows);setIntradayStatus(rows.length>=2?("数据源："+String(data.source||"可用分时数据")+" · "+rows.length+" 点"):(Array.isArray(data.details)?data.details.map((x:{provider:string;status:string;count:number})=>x.provider+"："+x.status+"（"+x.count+"点）").join("；"):"暂时没有足够的当日分时数据"));}
+   }catch(error){if(active)setIntradayStatus(error instanceof Error?error.message:"当日分时数据暂不可用");}
+  };
+  void refresh();const timer=setInterval(()=>void refresh(),180000);
+  return()=>{active=false;clearInterval(timer);};
  },[code]);
  useEffect(()=>{
   if(!/^\d{6}$/.test(code))return;
@@ -73,6 +91,18 @@ export default function FundDetails(){
    <div><p className="text-xs text-slate-500">近30日收益</p><p className="mt-1 text-lg font-semibold">{fmt(windowRate(points,30))}</p></div>
    <div><p className="text-xs text-slate-500">近90日收益</p><p className="mt-1 text-lg font-semibold">{fmt(windowRate(points,90))}</p></div>
   </div>
+ </section>
+ <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7">
+  <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-semibold">当日实时估值变化</h2><p className="mt-1 text-xs text-slate-400">优先使用平台分时数据；历史采集曲线取决于数据源及云端采集情况。</p></div><span className="text-xs text-slate-500">${intraday.length} 个数据点</span></div>
+  {intraday.length>=2?(()=>{
+   const vals=intraday.map(p=>p.nav),min=Math.min(...vals),max=Math.max(...vals),range=Math.max(max-min,0.000001);
+   const points=intraday.map((p,i)=>(24+i/Math.max(1,intraday.length-1)*682).toFixed(2)+","+(190-(p.nav-min)/range*150).toFixed(2)).join(" ");
+   const first=new Date(intraday[0].at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false});
+   const last=new Date(intraday[intraday.length-1].at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false});
+   const delta=intraday[intraday.length-1].nav-intraday[0].nav;
+   return <><div className="mt-4 flex items-baseline justify-between"><strong className={"text-xl "+changeClass(delta)}>{delta>=0?"+":""}{delta.toFixed(4)}</strong><span className="text-xs text-slate-400">{first}–{last}</span></div><svg viewBox="0 0 730 220" role="img" aria-label={name+"当日实时估值变化曲线"} className="mt-3 w-full"><line x1="24" y1="190" x2="706" y2="190" stroke="#94a3b8" strokeOpacity=".35"/><polyline points={points} fill="none" stroke={delta>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/><text x="24" y="14" fill="#64748b" fontSize="11">{max.toFixed(4)}</text><text x="24" y="207" fill="#64748b" fontSize="11">{min.toFixed(4)}</text><text x="706" y="207" textAnchor="end" fill="#64748b" fontSize="11">{last}</text></svg></>;
+  })():<p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无足够的当日分时数据。{intradayStatus}</p>}
+  <p className="mt-2 break-words text-xs text-slate-400">{intradayStatus}。盘中估算不等于基金官方实时净值。</p>
  </section>
  <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">净值走势</h2><p className="mt-1 text-xs text-slate-400">实线：公布净值；虚线：今日盘中估算</p></div><div className="flex gap-1">{[30,90,180,365].map(n=><button type="button" key={n} onClick={()=>setSpan(n)} className={span===n?"rounded-lg bg-slate-900 px-3 py-2 text-xs text-white":"rounded-lg bg-slate-100 px-3 py-2 text-xs"}>{n===365?"1年":n+"天"}</button>)}</div></div>
  {graph.length>=2?<svg viewBox="0 0 730 255" role="img" aria-label={name+"公布净值和当日有效盘中估值走势"} className="mt-5 w-full"><line x1="30" y1="220" x2="700" y2="220" stroke="#94a3b8" strokeOpacity=".4"/><polyline points={line} fill="none" stroke="#e11d48" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>{intradayLine&&<><polyline points={intradayLine} fill="none" stroke="#e11d48" strokeWidth="2.5" strokeDasharray="6 5"/><circle cx="700" cy={220-(estimate!.estimatedNav!-lo)/range*185} r="4" fill="#e11d48"/><text x="700" y="12" textAnchor="end" fill="#e11d48" fontSize="11">今日估算 {estimate!.estimatedNav!.toFixed(4)}</text></>}<text x="30" y="245" fill="#64748b" fontSize="11">{graph[0].date}</text><text x="700" y="245" textAnchor="end" fill="#64748b" fontSize="11">{hasIntraday?"今日盘中":graph[graph.length-1].date}</text><text x="32" y="22" fill="#64748b" fontSize="11">{hi.toFixed(4)}</text><text x="32" y="217" fill="#64748b" fontSize="11">{lo.toFixed(4)}</text></svg>:<p className="mt-6 text-sm text-slate-400">历史净值点不足，无法绘图。</p>}
