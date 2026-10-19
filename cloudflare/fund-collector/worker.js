@@ -16,7 +16,7 @@ export default {
   ]);
   if(!pointsRes.ok||!portfoliosRes.ok||!todayRes.ok)return Response.json({ok:false,service:"weis-fund-collector",configured:true,database:pointsRes.ok&&todayRes.ok?"ok":"error_"+(!pointsRes.ok?pointsRes.status:todayRes.status),portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status},{status:503});
   const latestRows=await pointsRes.json(),portfolioRows=await portfoliosRes.json(),todayRows=await todayRes.json();
-  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\\d{6}$/.test(code)))];
+  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))];
   const hhmm=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date());
   const minute=Number(hhmm.slice(0,2))*60+Number(hhmm.slice(3,5));
   const marketWindow=(minute>=570&&minute<=690)||(minute>=780&&minute<=900);
