@@ -24,3 +24,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare/fund-collector
           command: deploy
+          secrets: |
+            [
+              {"name":"SUPABASE_URL","value":"${{ secrets.SUPABASE_URL }}"},
+              {"name":"SUPABASE_SERVICE_ROLE_KEY","value":"${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"}
+            ]
