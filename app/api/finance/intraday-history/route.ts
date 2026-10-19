@@ -133,7 +133,7 @@ async function databasePoints(code:string):Promise<Point[]>{
 }
 export async function GET(request:NextRequest){
  const code=request.nextUrl.searchParams.get("code")??"";
- if(!/^\\d{6}$/.test(code))return NextResponse.json({error:"invalid code"},{status:400});
+ if(!/^\d{6}$/.test(code))return NextResponse.json({error:"invalid code"},{status:400});
  const feeds=await Promise.allSettled([pingzhong(code),mobile(code),bondProxyCurve(code),databasePoints(code)]);
  const values=feeds.map(f=>f.status==="fulfilled"?f.value:[]);
  const [first,second,proxy,stored]=values;
