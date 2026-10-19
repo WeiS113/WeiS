@@ -11,6 +11,24 @@ function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(typeof obj.FCODE==="string" || typeof obj.FCODE==="number")return [obj];
  return Object.values(obj).flatMap(x=>records(x,depth+1));
 }
+async function queryFundGz(code:string):Promise<Estimate|null>{
+ try{
+  const url="https://fundgz.1234567.com.cn/js/"+code+".js?rt="+Date.now();
+  const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(7000),headers:{"User-Agent":"Mozilla/5.0","Referer":"https://fund.eastmoney.com/"}});
+  if(!res.ok)return null;
+  const text=await res.text();
+  const match=text.match(/jsonpgz\((\{[\s\S]*?\})\)\s*;?/);
+  if(!match)return null;
+  const row=JSON.parse(match[1]) as Record<string,unknown>;
+  if(String(row.fundcode??"")!==code)return null;
+  const time=typeof row.gztime==="string"?row.gztime:null;
+  const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+  if(!time||time.replaceAll("/","-").slice(0,10)!==today)return null;
+  const nav=numeric(row.gsz),change=numeric(row.gszzl);
+  if(nav===null||nav<=0||change===null||Math.abs(change)>100)return null;
+  return {code,name:typeof row.name==="string"?row.name:undefined,estimatedNav:nav,change,time,source:"天天基金 fundgz 备用估值（非官方净值）",confidence:"medium",model:"fundgz-fallback",sourceCount:1,diagnostic:"备用单源估值；建议与其他来源交叉核对"};
+ }catch{return null;}
+}
 async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
  const url=new URL(host);url.searchParams.set("FCODES",codes.join(","));url.searchParams.set("FIELDS","FCODE,SHORTNAME,GSZZL,GZTIME,GSZ,NAV,PDATE");
  const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(6500),headers:{"User-Agent":"Mozilla/5.0","Referer":"https://h5.1234567.com.cn/"}});
@@ -67,6 +85,10 @@ export async function GET(request:NextRequest){
   return {code,result,reason};
  }));
  const proxyByCode=new Map(proxies.map(x=>[x.code,x]));
+ const fundGzCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0);
+ const fundGzResults=await Promise.all(fundGzCodes.map(async code=>({code,value:await queryFundGz(code)})));
+ const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
+
  const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0);
  const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
@@ -82,6 +104,8 @@ export async function GET(request:NextRequest){
    output.set(code,{...selected,confidence:agreement.length>=2?"high":"medium",model:"direct",sourceCount:ordered.length,disagreement,diagnostic:ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
    continue;
   }
+  const fundGz=fundGzByCode.get(code);
+  if(fundGz){output.set(code,fundGz);continue;}
   const bond=bondByCode.get(code);
   if(bond?.value){output.set(code,bond.value);continue;}
   const proxy=proxyByCode.get(code);
