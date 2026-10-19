@@ -2,7 +2,16 @@ export default {
  async scheduled(event,env,ctx){ctx.waitUntil(collect(env));},
  async fetch(request,env){
   if(new URL(request.url).pathname!=="/health")return new Response("not found",{status:404});
-  return Response.json({ok:true,service:"weis-fund-collector",configured:Boolean(env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&env.WEIS_SITE_URL)});
+  const configured=Boolean(env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&env.WEIS_SITE_URL);
+  if(!configured)return Response.json({ok:false,service:"weis-fund-collector",configured:false,database:"not_checked"},{status:503});
+  const base=env.SUPABASE_URL.replace(/\\/$/,"")+"/rest/v1";
+  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
+  const checks=await Promise.all([
+   fetch(base+"/finance_intraday_points?select=code&limit=1",{headers}).then(r=>r.ok?"ok":"error_"+r.status).catch(()=>"unreachable"),
+   fetch(base+"/finance_portfolios?select=codes&limit=1",{headers}).then(r=>r.ok?"ok":"error_"+r.status).catch(()=>"unreachable")
+  ]);
+  const ok=checks.every(x=>x==="ok");
+  return Response.json({ok,service:"weis-fund-collector",configured:true,database:checks[0],portfolio_source:checks[1]},{status:ok?200:503});
  }
 };
 function marketOpen(){
