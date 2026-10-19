@@ -18,13 +18,13 @@ async function pingzhong(code:string):Promise<Point[]>{
  const res=await fetch("https://fund.eastmoney.com/pingzhongdata/"+code+".js",{cache:"no-store",signal:AbortSignal.timeout(7000),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://fund.eastmoney.com/"}});
  if(!res.ok)throw Error("source unavailable");
  const txt=await res.text();if(txt.length>5_000_000)throw Error("oversize");
- const m=txt.match(/(?:var\s+)?Data_gzTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
+ const m=txt.match(/(?:var\s+)?Data_gzTrend\s*=\s*(\[[\s\S]*?\])\s*;?/);
  if(!m)throw Error("Data_gzTrend missing");
  return normalize(JSON.parse(m[1]),code);
 }
 async function mobile(code:string):Promise<Point[]>{
  const url="https://fundmobapi.eastmoney.com/FundMNewApi/FundVarietieValuationDetail?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0";
- const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(6500),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://fund.eastmoney.com/"}});
+ const res=await fetch(url,{cache:"no-store",signal:AbortSignal.timeout(12000),headers:{"User-Agent":"Mozilla/5.0",Referer:"https://fund.eastmoney.com/"}});
  if(!res.ok)throw Error("mobile unavailable");
  const json=await res.json();
  const rows=Array.isArray(json?.Datas)?json.Datas:[];
