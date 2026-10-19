@@ -7,22 +7,16 @@
 2. 执行仓库文件 `supabase/migrations/20261016_finance_intraday_points.sql`。
 3. 确认 Table Editor 中存在 `finance_intraday_points`。
 
-## B. 让 GitHub 自动部署 Worker
+## B. 一次性配置 GitHub Secrets（之后无需在 Cloudflare 手动填密钥）
 1. 在 Cloudflare Dashboard → Workers & Pages → 账户概览中复制 **Account ID**。
-2. 创建 Cloudflare API Token，使用自定义权限，至少授予该账户的 **Workers Scripts: Edit**、**Workers Tail: Read**（如有）和 **Account Settings: Read** 权限。Token 只需用于部署 Worker。
-3. 在 GitHub 仓库 WeiS113/WeiS → Settings → Secrets and variables → Actions → New repository secret，新增：
+2. 创建 Cloudflare API Token，授予目标账户 Workers Scripts Edit 所需权限。
+3. 在 GitHub 仓库 `WeiS113/WeiS` → **Settings → Secrets and variables → Actions**，添加以下四个 **Repository secrets**：
    - `CLOUDFLARE_ACCOUNT_ID`：Cloudflare Account ID。
-   - `CLOUDFLARE_API_TOKEN`：上一步创建的 API Token。
-4. 打开仓库 Actions，运行 **Deploy fund collector** → **Run workflow**。也会在之后修改 `cloudflare/fund-collector/**` 并推送到 main 时自动部署。
-5. 部署完成后，Cloudflare Workers & Pages 应出现 `weis-fund-collector`，`wrangler.toml` 中的 Cron Trigger 会随部署注册。
-
-## C. 添加 Supabase 服务端密钥（在 Worker 上设置，不要放 GitHub）
-1. 打开 Cloudflare → Workers & Pages → `weis-fund-collector` → Settings → Variables and Secrets。
-2. 添加两项 **Secret**：
-   - `SUPABASE_URL`：Supabase Project URL（格式通常为 `https://<project-ref>.supabase.co`）。
-   - `SUPABASE_SERVICE_ROLE_KEY`：Supabase → Settings → API Keys → **Legacy anon, service_role API keys** 里的 `service_role` JWT。当前代码使用旧版 service_role JWT；新版 `sb_secret_...` 不能直接当作该 JWT 使用。
-3. `WEIS_SITE_URL` 已在 `wrangler.toml` 设为 `https://weis13.cn`。若生产网站域名不同，修改该值并重新部署。
-4. 保存 Secret 后如 Cloudflare 要求部署新版本，执行部署。
+   - `CLOUDFLARE_API_TOKEN`：Cloudflare 部署 API Token。
+   - `SUPABASE_URL`：Supabase Project URL，格式通常为 `https://<project-ref>.supabase.co`。
+   - `SUPABASE_SERVICE_ROLE_KEY`：Supabase → Settings → API Keys → **Legacy anon, service_role API keys** 里的 `service_role` JWT。当前 Worker 使用旧版 service_role JWT；不要用 `sb_publishable_...`，也不要把密钥发给聊天或写入代码。
+4. 打开仓库 **Actions → Deploy fund collector → Run workflow**。成功后会部署 `weis-fund-collector`、注册 Cron，并将两个 Supabase Secret 安全写入 Worker。之后修改 `cloudflare/fund-collector/**` 并推送到 main 时会自动重新部署。
+5. `WEIS_SITE_URL` 已在 `wrangler.toml` 设为 `https://weis13.cn`。若生产网站域名不同，修改该值并重新部署。
 
 ## D. 验证
 1. 打开 Worker 的 `*.workers.dev/health`。应返回 `configured: true`；这只验证配置存在，不代表数据库读写成功。
