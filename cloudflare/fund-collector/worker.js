@@ -42,7 +42,7 @@ async function collect(env){
    const url=new URL("/api/finance/estimate",env.WEIS_SITE_URL);
    url.searchParams.set("code",code);
    const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});
-   if(!r.ok){console.warn("estimate endpoint failed",code,r.status);return;}
+   if(!r.ok){console.warn("estimate endpoint failed",code,r.status,(await r.text()).slice(0,240));return;}
    const q=await r.json();
    const nav=Number(q.estimatedNav),change=Number(q.change);
    const time=typeof q.time==="string"?q.time:"";
@@ -51,6 +51,7 @@ async function collect(env){
    const at=new Date(Math.floor(Date.now()/300000)*300000).toISOString();
    const payload={code,at,nav,change_percent:change,source:String(q.source||"unknown").slice(0,160),model:String(q.model||"direct").slice(0,70)};
    const saved=await fetch(api+"/finance_intraday_points?on_conflict=code,at,model",{method:"POST",headers:{...headers,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify(payload)});
+   console.log("estimate candidate",code,{nav,change,time,source:payload.source,model:payload.model});
    if(!saved.ok)throw Error("Supabase insert "+saved.status+" "+(await saved.text()).slice(0,180));
    console.log("estimate saved",code,at,payload.source);
   }catch(err){console.error("collect failed",code,String(err));}
