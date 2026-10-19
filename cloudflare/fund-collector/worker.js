@@ -28,7 +28,7 @@ async function collect(env){
    const url=new URL("/api/finance/estimate",env.WEIS_SITE_URL);
    url.searchParams.set("code",code);
    const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});
-   if(!r.ok)continue;
+   if(!r.ok)return;
    const q=await r.json();
    const nav=Number(q.estimatedNav),change=Number(q.change);
    const time=typeof q.time==="string"?q.time:"";
