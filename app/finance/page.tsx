@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
 import {supabase} from "../../lib/supabase";
 import VoiceFundTrade,{type VoiceTrade} from "../../components/VoiceFundTrade";
+import FinanceImageImport,{type Recognized} from "../../components/FinanceImageImport";
 type Holding={quantity:number;cost:number};
 type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
@@ -201,6 +202,14 @@ export default function FinancePage(){
   if(!Number.isFinite(q)||q<0||!Number.isFinite(c)||c<0){setMessage("份额与成本必须为非负数字");return;}
   setHoldings(old=>({...old,["fund"+editing]:{quantity:q,cost:c}}));setEditing(null);setMessage("");
  }
+ function importRecognized(rows:Recognized[]){
+  const funds=rows.filter(row=>row.kind==="fund"&&/^\d{6}$/.test(row.code)&&row.quantity!==null&&row.cost!==null);
+  if(!funds.length){setMessage("识别结果中没有填写完整的场外基金记录；股票/ETF暂不导入此基金账户。");return;}
+  setCodes(previous=>[...new Set([...previous,...funds.map(row=>row.code)])]);
+  setHoldings(previous=>({...previous,...Object.fromEntries(funds.map(row=>["fund"+row.code,{quantity:Number(row.quantity)||0,cost:Number(row.cost)||0}]))}));
+  setNames(previous=>({...previous,...Object.fromEntries(funds.filter(row=>row.name&&row.name!==row.code).map(row=>[row.code,row.name]))}));
+  setMessage("已导入 "+funds.length+" 只场外基金。请核对份额与成本；如需跨设备同步，请确认云端同步状态。"+(rows.some(row=>row.kind==="stock")?" 股票/ETF未导入基金账户。":""));
+}
  function applyVoiceTrade(trade:VoiceTrade){
   const key="fund"+trade.code;
   const old=holdings[key]??{quantity:0,cost:0};
@@ -258,7 +267,8 @@ export default function FinancePage(){
       <div className="col-span-2 sm:col-span-1"><p className="text-xs text-slate-400">持仓成本</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(held.reduce((a,x)=>a+x.invested,0))}</p></div>
     </div>
    </section>
-   <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">我的基金</h2><p className="mt-1 text-xs text-slate-500">点击基金可展开详情和编辑持仓</p></div><select aria-label="基金排序" value={sort} onChange={e=>setSort(e.target.value as typeof sort)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs"><option value="custom">添加顺序</option><option value="change">今日涨幅</option><option value="profit">累计收益</option></select></div>
+   <FinanceImageImport onImport={importRecognized}/>
+    <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">我的基金</h2><p className="mt-1 text-xs text-slate-500">点击基金可展开详情和编辑持仓</p></div><select aria-label="基金排序" value={sort} onChange={e=>setSort(e.target.value as typeof sort)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs"><option value="custom">添加顺序</option><option value="change">今日涨幅</option><option value="profit">累计收益</option></select></div>
     <div className="relative mt-4"><div className="flex gap-2"><input inputMode="search" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add(input.trim())}} placeholder="搜索基金名称 / 输入六位基金代码" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-100"/><button type="button" onClick={()=>add(input.trim())} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white">＋ 添加</button></div>{searching&&<p className="mt-2 text-xs text-slate-400">正在搜索…</p>}{results.length>0&&<div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{results.map(x=><button key={x.code} type="button" onClick={()=>add(x.code,x.name)} className="flex w-full justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-slate-50"><span className="truncate">{x.name}</span><span className="shrink-0 text-xs text-rose-600">{x.code} ＋</span></button>)}</div>}</div>
     {message&&<p role="status" className="mt-2 text-xs text-amber-700">{message}</p>}
     <div className="mt-3 divide-y divide-slate-100">{displayed.map(x=><article key={x.code} className="py-4">
