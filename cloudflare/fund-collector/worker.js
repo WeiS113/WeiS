@@ -4,7 +4,7 @@ export default {
   if(new URL(request.url).pathname!=="/health")return new Response("not found",{status:404});
   const configured=Boolean(env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&env.WEIS_SITE_URL);
   if(!configured)return Response.json({ok:false,service:"weis-fund-collector",configured:false,database:"not_checked"},{status:503});
-  const base=env.SUPABASE_URL.replace(/\\/$/,"")+"/rest/v1";
+  const base=(env.SUPABASE_URL.endsWith("/")?env.SUPABASE_URL.slice(0,-1):env.SUPABASE_URL)+"/rest/v1";
   const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
   const checks=await Promise.all([
    fetch(base+"/finance_intraday_points?select=code&limit=1",{headers}).then(r=>r.ok?"ok":"error_"+r.status).catch(()=>"unreachable"),
@@ -25,7 +25,7 @@ function marketOpen(){
 async function collect(env){
  if(!marketOpen())return;
  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.WEIS_SITE_URL)throw Error("Missing Worker secrets");
- const api=env.SUPABASE_URL.replace(/\/$/,"")+"/rest/v1";
+ const api=(env.SUPABASE_URL.endsWith("/")?env.SUPABASE_URL.slice(0,-1):env.SUPABASE_URL)+"/rest/v1";
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
  const portfolios=await fetch(api+"/finance_portfolios?select=codes",{headers});
  if(!portfolios.ok)throw Error("Cannot load watchlists: "+portfolios.status);
