@@ -25,7 +25,5 @@ jobs:
           workingDirectory: cloudflare/fund-collector
           command: deploy
           secrets: |
-            [
-              {"name":"SUPABASE_URL","value":"${{ secrets.SUPABASE_URL }}"},
-              {"name":"SUPABASE_SERVICE_ROLE_KEY","value":"${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"}
-            ]
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
