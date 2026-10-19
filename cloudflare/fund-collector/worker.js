@@ -13,7 +13,7 @@ export default {
   if(!pointsRes.ok||!portfoliosRes.ok)return Response.json({ok:false,service:"weis-fund-collector",configured:true,database:pointsRes.ok?"ok":"error_"+pointsRes.status,portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status},{status:503});
   const latestRows=await pointsRes.json();
   const portfolioRows=await portfoliosRes.json();
-  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\\d{6}$/.test(code)))];
+  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))];
   return Response.json({ok:true,service:"weis-fund-collector",configured:true,database:"ok",portfolio_source:"ok",portfolio_rows:portfolioRows.length,unique_fund_codes:codes.length,latest_point:latestRows[0]||null});
  }
 };
@@ -34,6 +34,8 @@ async function collect(env){
  if(!portfolios.ok)throw Error("Cannot load watchlists: "+portfolios.status);
  const data=await portfolios.json();
  const codes=[...new Set(data.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))].slice(0,120);
+ console.log("fund collector start",{portfolioRows:data.length,uniqueCodes:codes.length});
+ if(!codes.length){console.warn("fund collector found no codes; verify finance_portfolios sync");return;}
  for(let i=0;i<codes.length;i+=5){
   await Promise.all(codes.slice(i,i+5).map(async code=>{
   try{
