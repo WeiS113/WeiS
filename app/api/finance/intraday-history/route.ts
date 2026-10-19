@@ -108,7 +108,8 @@ async function databasePoints(code:string):Promise<Point[]>{
  const today=localDate(Date.now());
  const start=Date.parse(today+"T00:00:00+08:00");
  const end=start+24*60*60*1000;
- const url=new URL(base.replace(/\\/$/,"")+"/rest/v1/finance_intraday_points");
+ const root=base.endsWith("/")?base.slice(0,-1):base;
+ const url=new URL(root+"/rest/v1/finance_intraday_points");
  url.searchParams.set("select","code,at,nav,change_percent,source,model");
  url.searchParams.set("code","eq."+code);
  url.searchParams.set("at","gte."+new Date(start).toISOString());
