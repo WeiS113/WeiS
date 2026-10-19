@@ -1,20 +1,26 @@
 export default {
- async scheduled(event,env,ctx){ctx.waitUntil(collect(env));},
+ async scheduled(event,env,ctx){console.log("fund collector cron fired",new Date().toISOString());ctx.waitUntil(collect(env));},
  async fetch(request,env){
-  if(new URL(request.url).pathname!=="/health")return new Response("not found",{status:404});
+  const url=new URL(request.url);
+  if(url.pathname!=="/health")return new Response("not found",{status:404});
   const configured=Boolean(env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY&&env.WEIS_SITE_URL);
-  if(!configured)return Response.json({ok:false,service:"weis-fund-collector",configured:false,database:"not_checked"},{status:503});
+  if(!configured)return Response.json({ok:false,service:"weis-fund-collector",configured:false,database:"not_checked",hint:"检查 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY、WEIS_SITE_URL Worker secrets/vars"},{status:503});
   const base=(env.SUPABASE_URL.endsWith("/")?env.SUPABASE_URL.slice(0,-1):env.SUPABASE_URL)+"/rest/v1";
   const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
-  const [pointsRes,portfoliosRes]=await Promise.all([
-   fetch(base+"/finance_intraday_points?select=code,at&order=at.desc&limit=1",{headers}),
-   fetch(base+"/finance_portfolios?select=codes",{headers})
+  const today=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const startAt=new Date(today+"T00:00:00+08:00").toISOString();
+  const [pointsRes,portfoliosRes,todayRes]=await Promise.all([
+   fetch(base+"/finance_intraday_points?select=code,at,source,model&order=at.desc&limit=1",{headers}),
+   fetch(base+"/finance_portfolios?select=codes",{headers}),
+   fetch(base+"/finance_intraday_points?select=code,at&at=gte."+encodeURIComponent(startAt)+"&order=at.desc&limit=5",{headers})
   ]);
-  if(!pointsRes.ok||!portfoliosRes.ok)return Response.json({ok:false,service:"weis-fund-collector",configured:true,database:pointsRes.ok?"ok":"error_"+pointsRes.status,portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status},{status:503});
-  const latestRows=await pointsRes.json();
-  const portfolioRows=await portfoliosRes.json();
-  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))];
-  return Response.json({ok:true,service:"weis-fund-collector",configured:true,database:"ok",portfolio_source:"ok",portfolio_rows:portfolioRows.length,unique_fund_codes:codes.length,latest_point:latestRows[0]||null});
+  if(!pointsRes.ok||!portfoliosRes.ok||!todayRes.ok)return Response.json({ok:false,service:"weis-fund-collector",configured:true,database:pointsRes.ok&&todayRes.ok?"ok":"error_"+(!pointsRes.ok?pointsRes.status:todayRes.status),portfolio_source:portfoliosRes.ok?"ok":"error_"+portfoliosRes.status},{status:503});
+  const latestRows=await pointsRes.json(),portfolioRows=await portfoliosRes.json(),todayRows=await todayRes.json();
+  const codes=[...new Set(portfolioRows.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\\d{6}$/.test(code)))];
+  const hhmm=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date());
+  const minute=Number(hhmm.slice(0,2))*60+Number(hhmm.slice(3,5));
+  const marketWindow=(minute>=570&&minute<=690)||(minute>=780&&minute<=900);
+  return Response.json({ok:true,service:"weis-fund-collector",configured:true,database:"ok",portfolio_source:"ok",portfolio_rows:portfolioRows.length,unique_fund_codes:codes.length,sample_codes:codes.slice(0,12),latest_point:latestRows[0]||null,today_points_sample:todayRows,china_time:today+" "+hhmm,market_window:marketWindow,diagnosis:codes.length===0?"finance_portfolios 中没有基金代码：先在网站点击上传本机/开启云端同步":todayRows.length===0?"今日暂无写入记录：检查 Worker Cron 日志、估值接口当日返回和 Supabase INSERT 错误":"已发现今日采集记录"});
  }
 };
 function marketOpen(){
