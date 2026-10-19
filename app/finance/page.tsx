@@ -15,6 +15,8 @@ const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
 const CURVES_KEY="weis-finance-intraday-curves-v2";
 const TRADES_KEY="weis-finance-voice-trades-v1";
+const GROUPS_KEY="weis-finance-groups-v1";
+const FUND_GROUPS_KEY="weis-finance-fund-groups-v1";
 const INITIAL:string[]=[];
 const money=(n:number)=>"¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const signed=(n:number)=> (n>0?"+":"")+n.toFixed(2)+"%";
@@ -28,6 +30,11 @@ export default function FinancePage(){
  const [codes,setCodes]=useState<string[]>([]);
  const [holdings,setHoldings]=useState<Record<string,Holding>>({});
  const [names,setNames]=useState<Record<string,string>>({});
+ const [groups,setGroups]=useState<string[]>(["默认分组"]);
+ const [fundGroups,setFundGroups]=useState<Record<string,string>>({});
+ const [groupFilter,setGroupFilter]=useState("全部");
+ const [newGroup,setNewGroup]=useState("");
+ const [manageGroups,setManageGroups]=useState(false);
  const [ready,setReady]=useState(false);
  const [quotes,setQuotes]=useState<Record<string,Quote>>({});
  const [estimates,setEstimates]=useState<Record<string,Estimate>>({});
@@ -65,10 +72,13 @@ export default function FinancePage(){
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
   }catch{setCodes(INITIAL);}
   try{const saved=JSON.parse(localStorage.getItem(CURVES_KEY)||"{}") as Record<string,CurvePoint[]>;const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});const restored:Record<string,CurvePoint[]>={};for(const [code,arr] of Object.entries(saved)){if(!/^\d{6}$/.test(code)||!Array.isArray(arr))continue;restored[code]=arr.filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.change)&&Number.isFinite(p.nav)&&p.nav>0&&new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===day&&marketMinute(p.at)!==null).slice(-360);}setCurves(restored);}catch{}
+  try{const g=JSON.parse(localStorage.getItem(GROUPS_KEY)||'["默认分组"]');setGroups([...new Set(["默认分组",...(Array.isArray(g)?g.filter((x:unknown)=>typeof x==="string"&&x.trim()).map((x:string)=>x.trim()):[])])]);}catch{}
+  try{const g=JSON.parse(localStorage.getItem(FUND_GROUPS_KEY)||"{}");setFundGroups(g&&typeof g==="object"&&!Array.isArray(g)?g:{});}catch{}
   setReady(true);
  },[]);
  useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));},[ready,codes,names]);
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
+ useEffect(()=>{if(ready){localStorage.setItem(GROUPS_KEY,JSON.stringify(groups));localStorage.setItem(FUND_GROUPS_KEY,JSON.stringify(fundGroups));}},[ready,groups,fundGroups]);
  useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
  useEffect(()=>{
   let cancelled=false;
@@ -243,7 +253,7 @@ export default function FinancePage(){
   const market=nav!==null?q*nav:null;
   const profit=market!==null?market-invested:null;
   const today=base!==null?q*(nav!-base):null;
-  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:platformCurves[code]?.length?platformCurves[code]:(curves[code]||[]),curveSource:platformCurves[code]?.length?(platformSources[code]||"云端分时历史"):((curves[code]?.length??0)>0?"本机实时采样（仅在页面打开期间）":""),stocks:estimate?.stocks||[],coverage:estimate?.coverage};
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:platformCurves[code]?.length?platformCurves[code]:(curves[code]||[]),curveSource:platformCurves[code]?.length?(platformSources[code]||"云端分时历史"):((curves[code]?.length??0)>0?"本机实时采样（仅在页面打开期间）":""),stocks:estimate?.stocks||[],coverage:estimate?.coverage,group:fundGroups[code]||"默认分组"};
  });
  const held=positions.filter(x=>x.q>0);
  const valueKnown=held.filter(x=>x.market!==null);
@@ -252,7 +262,7 @@ export default function FinancePage(){
  const totalProfit=totalValue-knownCost;
  const todayHeld=held.filter(x=>x.live&&x.today!==null);
  const todayTotal=todayHeld.reduce((a,x)=>a+x.today!,0);
- const displayed=[...positions].sort((a,b)=>sort==="change"?(b.change??-999)-(a.change??-999):sort==="profit"?(b.profit??-Infinity)-(a.profit??-Infinity):0);
+ const displayed=positions.filter(x=>groupFilter==="全部"||x.group===groupFilter).sort((a,b)=>sort==="change"?(b.change??-999)-(a.change??-999):sort==="profit"?(b.profit??-Infinity)-(a.profit??-Infinity):0);
  return <main className="min-h-screen bg-[#f6f7fa] text-slate-800">
   <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4"><div><Link href="/" className="text-xs text-slate-400">WeiS /</Link><h1 className="text-xl font-bold">我的基金账户</h1></div><button type="button" disabled={loading} onClick={()=>void refresh()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading?"更新中…":"↻ 刷新行情"}</button></div></header>
   <div className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
@@ -268,7 +278,7 @@ export default function FinancePage(){
     </div>
    </section>
    <FinanceImageImport onImport={importRecognized}/>
-    <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">我的基金</h2><p className="mt-1 text-xs text-slate-500">点击基金可展开详情和编辑持仓</p></div><select aria-label="基金排序" value={sort} onChange={e=>setSort(e.target.value as typeof sort)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs"><option value="custom">添加顺序</option><option value="change">今日涨幅</option><option value="profit">累计收益</option></select></div>
+    <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold">我的基金</h2><p className="mt-1 text-xs text-slate-500">点击基金可展开详情和编辑持仓</p></div><div className="flex gap-2"><select aria-label="基金分组筛选" value={groupFilter} onChange={e=>setGroupFilter(e.target.value)} className="max-w-32 rounded-xl border border-slate-200 px-2 py-2 text-xs"><option value="全部">全部分组</option>{groups.map(g=><option key={g} value={g}>{g}</option>)}</select><button type="button" onClick={()=>setManageGroups(true)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs">管理分组</button><select aria-label="基金排序" value={sort} onChange={e=>setSort(e.target.value as typeof sort)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs"><option value="custom">添加顺序</option><option value="change">今日涨幅</option><option value="profit">累计收益</option></select></div></div>
     <div className="relative mt-4"><div className="flex gap-2"><input inputMode="search" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add(input.trim())}} placeholder="搜索基金名称 / 输入六位基金代码" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-100"/><button type="button" onClick={()=>add(input.trim())} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white">＋ 添加</button></div>{searching&&<p className="mt-2 text-xs text-slate-400">正在搜索…</p>}{results.length>0&&<div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-xl">{results.map(x=><button key={x.code} type="button" onClick={()=>add(x.code,x.name)} className="flex w-full justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-slate-50"><span className="truncate">{x.name}</span><span className="shrink-0 text-xs text-rose-600">{x.code} ＋</span></button>)}</div>}</div>
     {message&&<p role="status" className="mt-2 text-xs text-amber-700">{message}</p>}
     <div className="mt-3 divide-y divide-slate-100">{displayed.map(x=><article key={x.code} className="py-4">
@@ -284,7 +294,7 @@ export default function FinancePage(){
        <div><p className="text-slate-400">当前市值</p><p className="mt-1 font-semibold">{x.market===null?"—":money(x.market)}</p></div>
        <div><p className="text-slate-400">累计收益</p><p className={"mt-1 font-semibold "+(x.profit===null?"text-slate-400":positive(x.profit))}>{x.profit===null?"—":(x.profit>=0?"+":"")+money(x.profit)}</p></div>
       </div>
-      <p className="mt-4 text-xs text-slate-400">{x.live?"盘中参考估值":"已公布净值或暂不可用"} · {x.time||"暂无时间"}</p>
+      <label className="mb-3 flex items-center gap-2 text-xs text-slate-500">所属分组<select aria-label={x.name+"所属分组"} value={x.group} onChange={e=>setFundGroups(prev=>({...prev,[x.code]:e.target.value}))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">{groups.map(g=><option key={g} value={g}>{g}</option>)}</select></label><p className="mt-4 text-xs text-slate-400">{x.live?"盘中参考估值":"已公布净值或暂不可用"} · {x.time||"暂无时间"}</p>
       <p className="mt-1 text-[11px] text-slate-400">{x.source}</p>
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">当日实时估值变化</p><p className="mt-1 text-[11px] text-slate-400">交易日 09:30–11:30、13:00–15:00 · 优先平台分时数据</p></div><span className="text-xs font-semibold tabular-nums">{x.nav===null?"—":x.nav.toFixed(4)}</span></div>
       {x.curve.length>=2?(()=>{
@@ -311,6 +321,7 @@ export default function FinancePage(){
     </article>)}</div>{!codes.length&&<p className="py-12 text-center text-sm text-slate-500">暂无基金，输入代码即可添加。</p>}
    </section>
    <VoiceFundTrade funds={codes.map(code=>({code,name:names[code]||quotes[code]?.name||estimates[code]?.name||code}))} onApply={applyVoiceTrade}/>
+   {manageGroups&&<div role="dialog" aria-modal="true" aria-label="管理基金分组" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-semibold">管理基金分组</h2><form className="mt-4 flex gap-2" onSubmit={e=>{e.preventDefault();const v=newGroup.trim().slice(0,24);if(!v)return;if(groups.includes(v)){setMessage("分组已存在");return;}setGroups(p=>[...p,v]);setGroupFilter(v);setNewGroup("");}}><input value={newGroup} onChange={e=>setNewGroup(e.target.value)} placeholder="新分组名称" maxLength={24} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm"/><button type="submit" className="rounded-xl bg-slate-900 px-4 py-3 text-sm text-white">新增</button></form><div className="mt-4 space-y-2">{groups.map(g=><div key={g} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3 text-sm"><span>{g} ({positions.filter(x=>x.group===g).length})</span>{g!=="默认分组"&&<button type="button" className="text-xs text-rose-600" onClick={()=>{setGroups(p=>p.filter(x=>x!==g));setFundGroups(p=>Object.fromEntries(Object.entries(p).map(([code,value])=>[code,value===g?"默认分组":value])));if(groupFilter===g)setGroupFilter("全部");}}>删除</button>}</div>)}</div><button type="button" onClick={()=>setManageGroups(false)} className="mt-5 w-full rounded-xl bg-slate-900 py-3 text-sm text-white">完成</button></div></div>}
    {editing&&<div role="dialog" aria-modal="true" aria-label="编辑基金持仓" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="text-lg font-semibold">编辑 {names[editing]||editing} 的持仓</h2><p className="mt-2 text-xs text-slate-500">输入实际持有份额和每份平均成本，不是购买金额。</p><label className="mt-4 block text-sm">持有份额<input type="number" min="0" step="any" value={quant} onChange={e=>setQuant(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label><label className="mt-4 block text-sm">每份成本（元）<input type="number" min="0" step="any" value={cost} onChange={e=>setCost(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3"/></label>{message&&<p className="mt-2 text-xs text-amber-700">{message}</p>}<div className="mt-5 flex gap-2"><button type="button" onClick={()=>setEditing(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm">取消</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-rose-600 py-3 text-sm font-semibold text-white">保存持仓</button></div></div></div>}
    <div className="mt-5 text-center text-xs text-slate-400">累计盈亏为当前参考市值减持仓成本，不包含已卖出份额的历史已实现收益。行情缺失时不以零填充。</div>
   </div>
