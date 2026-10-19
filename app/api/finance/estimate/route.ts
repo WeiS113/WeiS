@@ -104,11 +104,17 @@ export async function GET(request:NextRequest){
    output.set(code,{...selected,confidence:agreement.length>=2?"high":"medium",model:"direct",sourceCount:ordered.length,disagreement,diagnostic:ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
    continue;
   }
-  const fundGz=fundGzByCode.get(code);
-  if(fundGz){output.set(code,fundGz);continue;}
   const bond=bondByCode.get(code);
   if(bond?.value){output.set(code,bond.value);continue;}
   const proxy=proxyByCode.get(code);
+  // For equity funds, prefer a live holdings-weighted estimate when direct
+  // providers are unavailable; this is the explicit fallback model, with
+  // coverage and constituent quotes available for disclosure in the UI.
+  if(type==="equity"&&proxy?.result){
+   output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
+  }
+  const fundGz=fundGzByCode.get(code);
+  if(fundGz){output.set(code,fundGz);continue;}
   if(proxy?.result){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
