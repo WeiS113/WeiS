@@ -1,5 +1,5 @@
 export default {
- async scheduled(event,env,ctx){console.log("fund collector cron fired",new Date().toISOString());ctx.waitUntil(collect(env));},
+ async scheduled(event,env,ctx){console.log("fund collector cron fired",{cron:event.cron,scheduledTime:event.scheduledTime,at:new Date().toISOString()});ctx.waitUntil(collect(env).catch(err=>console.error("fund collector fatal",String(err))));},
  async fetch(request,env){
   const url=new URL(request.url);
   if(url.pathname!=="/health")return new Response("not found",{status:404});
@@ -55,8 +55,9 @@ async function collect(env){
  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.WEIS_SITE_URL)throw Error("Missing Worker secrets");
  const api=supabaseRestBase(env.SUPABASE_URL);
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
- const portfolios=await fetch(api+"/finance_portfolios?select=codes",{headers});
- if(!portfolios.ok)throw Error("Cannot load watchlists: "+portfolios.status);
+ const portfoliosUrl=api+"/finance_portfolios?select=codes";
+ const portfolios=await fetch(portfoliosUrl,{headers});
+ if(!portfolios.ok){const body=(await portfolios.text()).slice(0,800);console.error("Cannot load watchlists",{status:portfolios.status,url:portfoliosUrl,body});throw Error("Cannot load watchlists: "+portfolios.status+" "+body);}
  const data=await portfolios.json();
  const codes=[...new Set(data.flatMap(row=>Array.isArray(row.codes)?row.codes:[]).filter(code=>typeof code==="string"&&/^\d{6}$/.test(code)))].slice(0,120);
  console.log("fund collector start",{portfolioRows:data.length,uniqueCodes:codes.length});
