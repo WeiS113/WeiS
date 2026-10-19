@@ -115,28 +115,41 @@ export default function FinancePage(){
   return()=>clearTimeout(timer);
  },[ready,cloudReady,cloudUser,codes,names,holdings]);
  useEffect(()=>{
-  if(!ready||codes.length===0)return;
+  // Fetch platform/cloud history only for the expanded card. Pulling every fund
+  // at once caused a burst of third-party requests and made the page feel slow.
+  if(!ready||!expanded||!codes.includes(expanded))return;
   let active=true;
+  const code=expanded;
   const pull=async()=>{
-   const results=await Promise.all(codes.slice(0,30).map(async code=>{
-    try{
-     const start=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})+"T00:00:00+08:00";
-     const {data:stored,error:storeError}=await supabase.from("finance_intraday_points").select("at,nav,change_percent,source,model").eq("code",code).gte("at",new Date(start).toISOString()).order("at",{ascending:true}).limit(400);
-     if(!storeError&&stored&&stored.length>=2){
-      const rows=stored.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
-      if(rows.length>=2)return {code,points:rows,detail:"Cloudflare 定时采集 · Supabase 已存 "+rows.length+" 点",source:"云端历史估值（"+String(stored.at(-1)?.source||"参考估算")+"）"};
+   try{
+    const start=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})+"T00:00:00+08:00";
+    const {data:stored,error:storeError}=await supabase.from("finance_intraday_points").select("at,nav,change_percent,source,model").eq("code",code).gte("at",new Date(start).toISOString()).order("at",{ascending:true}).limit(400);
+    if(!storeError&&stored&&stored.length>=2){
+     const rows=stored.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
+     if(rows.length>=2){
+      if(active){
+       setPlatformCurves(prev=>({...prev,[code]:rows}));
+       setPlatformDetails(prev=>({...prev,[code]:"Cloudflare 定时采集 · Supabase 已存 "+rows.length+" 点"}));
+       setPlatformSources(prev=>({...prev,[code]:"云端历史估值（"+String(stored.at(-1)?.source||"参考估算")+"）"}));
+      }
+      return;
      }
-     const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
-     if(!r.ok)return {code,points:[] as CurvePoint[],detail:"分时服务请求失败",source:""};
-     const d=await r.json();
-     return {code,points:Array.isArray(d.points)?(d.points as CurvePoint[]):[],detail:Array.isArray(d.details)?d.details.map((x:{provider:string;status:string;count:number})=>x.provider+"："+x.status+"（"+x.count+" 点）").join("；"):"无平台诊断信息",source:typeof d.source==="string"?d.source:""};
-    }catch{return {code,points:[] as CurvePoint[],detail:"网络错误，无法获取平台分时数据",source:""};}
-   }));
-   if(active){setPlatformCurves(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.points]))}));setPlatformDetails(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.detail]))}));setPlatformSources(prev=>({...prev,...Object.fromEntries(results.map(x=>[x.code,x.source]))}));}
+    }
+    const r=await fetch("/api/finance/intraday-history?code="+code,{cache:"no-store"});
+    if(!r.ok)throw new Error("分时服务请求失败（HTTP "+r.status+"）");
+    const d=await r.json();
+    if(active){
+     setPlatformCurves(prev=>({...prev,[code]:Array.isArray(d.points)?d.points:[]}));
+     setPlatformDetails(prev=>({...prev,[code]:Array.isArray(d.details)?d.details.map((x:{provider:string;status:string;count:number})=>x.provider+"："+x.status+"（"+x.count+" 点）").join("；"):"无平台诊断信息"}));
+     setPlatformSources(prev=>({...prev,[code]:typeof d.source==="string"?d.source:""}));
+    }
+   }catch(e){
+    if(active)setPlatformDetails(prev=>({...prev,[code]:e instanceof Error?e.message:"网络错误，无法获取平台分时数据"}));
+   }
   };
   void pull();const timer=setInterval(()=>void pull(),180000);
   return()=>{active=false;clearInterval(timer);};
- },[ready,codes]);
+ },[ready,codes,expanded]);
  const refresh=useCallback(async()=>{
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
