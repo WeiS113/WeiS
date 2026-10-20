@@ -173,20 +173,22 @@ export default function FinancePage(){
    const newQuotes:Record<string,Quote>={};
    for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
    setQuotes(prev=>({...prev,...newQuotes}));
-   // Refresh today's cloud-collected curve points whenever the page opens or the user taps refresh.
-   const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
-   const start=new Date(day+"T00:00:00+08:00").toISOString();
-   const cloudCurves=await Promise.all(codes.map(async code=>{
-    try{
-     const {data,error}=await supabase.from("finance_intraday_points").select("at,nav,change_percent").eq("code",code).gte("at",start).order("at",{ascending:true}).limit(500);
-     if(error||!data)return null;
-     const points=data.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
-     return {code,points};
-    }catch{return null;}
-   }));
-   setPlatformCurves(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]=result.points;return next;});
-   setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
-   setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
+   // Load cloud curves in the background; never hold up quote/estimate rendering on history reads.
+   void (async()=>{
+    const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+    const start=new Date(day+"T00:00:00+08:00").toISOString();
+    const cloudCurves=await Promise.all(codes.map(async code=>{
+     try{
+      const {data,error}=await supabase.from("finance_intraday_points").select("at,nav,change_percent").eq("code",code).gte("at",start).order("at",{ascending:true}).limit(500);
+      if(error||!data)return null;
+      const points=data.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
+      return {code,points};
+     }catch{return null;}
+    }));
+    setPlatformCurves(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]=result.points;return next;});
+    setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
+    setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
+   })().catch(()=>{});
    const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
    setCurves(prev=>{const next={...prev};const now=Date.now();const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!valid(e.estimatedNav)||!isFresh(e.time)||!marketOpenNow())continue;const prior=(prev[e.code]||[]).filter(p=>new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===today&&marketMinute(p.at)!==null);if(prior.length&&now-prior[prior.length-1].at<30000){next[e.code]=prior;continue;}next[e.code]=[...prior,{at:now,change:e.change,nav:e.estimatedNav}].slice(-360);}return next;});
    setEstimates(prev=>{
