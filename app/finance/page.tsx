@@ -17,8 +17,6 @@ const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
 const CURVES_KEY="weis-finance-intraday-curves-v2";
-const QUOTES_CACHE_KEY="weis-finance-quotes-cache-v1";
-const ESTIMATES_CACHE_KEY="weis-finance-estimates-cache-v1";
 const TRADES_KEY="weis-finance-voice-trades-v1";
 const GROUPS_KEY="weis-finance-groups-v1";
 const FUND_GROUPS_KEY="weis-finance-fund-groups-v1";
@@ -77,14 +75,6 @@ export default function FinancePage(){
    const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
   }catch{setCodes(INITIAL);}
-  // Restore last successful market data immediately, then refresh from providers in the background.
-  try{const cached=JSON.parse(localStorage.getItem(QUOTES_CACHE_KEY)||"{}") as Record<string,Quote>;if(cached&&typeof cached==="object")setQuotes(cached);}catch{}
-  try{
-   const cached=JSON.parse(localStorage.getItem(ESTIMATES_CACHE_KEY)||"{}") as Record<string,Estimate>;
-   const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
-   const usable=Object.fromEntries(Object.entries(cached||{}).filter(([,e])=>e&&typeof e==="object"&&typeof e.code==="string"&&String(e.time||"").replaceAll("/","-").slice(0,10)===today));
-   setEstimates(usable);
-  }catch{}
   try{const saved=JSON.parse(localStorage.getItem(CURVES_KEY)||"{}") as Record<string,CurvePoint[]>;const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});const restored:Record<string,CurvePoint[]>={};for(const [code,arr] of Object.entries(saved)){if(!/^\d{6}$/.test(code)||!Array.isArray(arr))continue;restored[code]=arr.filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.change)&&Number.isFinite(p.nav)&&p.nav>0&&new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===day&&marketMinute(p.at)!==null).slice(-360);}setCurves(restored);}catch{}
   try{const g=JSON.parse(localStorage.getItem(GROUPS_KEY)||'["默认分组"]');setGroups([...new Set(["默认分组",...(Array.isArray(g)?g.filter((x:unknown)=>typeof x==="string"&&x.trim()).map((x:string)=>x.trim()):[])])]);}catch{}
   try{const g=JSON.parse(localStorage.getItem(FUND_GROUPS_KEY)||"{}");setFundGroups(g&&typeof g==="object"&&!Array.isArray(g)?g:{});}catch{}
@@ -94,8 +84,6 @@ export default function FinancePage(){
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
  useEffect(()=>{if(ready){localStorage.setItem(GROUPS_KEY,JSON.stringify(groups));localStorage.setItem(FUND_GROUPS_KEY,JSON.stringify(fundGroups));}},[ready,groups,fundGroups]);
  useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
- useEffect(()=>{if(ready&&Object.keys(quotes).length)localStorage.setItem(QUOTES_CACHE_KEY,JSON.stringify(quotes));},[ready,quotes]);
- useEffect(()=>{if(ready&&Object.keys(estimates).length)localStorage.setItem(ESTIMATES_CACHE_KEY,JSON.stringify(estimates));},[ready,estimates]);
  useEffect(()=>{
   let cancelled=false;
   void supabase.auth.getUser().then(async ({data,error})=>{
@@ -182,20 +170,7 @@ export default function FinancePage(){
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
   try{
-   // Start published-NAV requests immediately in parallel; never wait for them before showing estimates.
-   if(!quoteRefreshing.current){
-    quoteRefreshing.current=true;
-    void Promise.all(codes.map(async code=>{
-     try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store",signal:AbortSignal.timeout(7000)});if(!response.ok)return null;return await response.json() as Quote;}
-     catch{return null;}
-    })).then(quoteOutcomes=>{
-     const newQuotes:Record<string,Quote>={};
-     for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
-     if(Object.keys(newQuotes).length)setQuotes(prev=>({...prev,...newQuotes}));
-     for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
-    }).catch(()=>{}).finally(()=>{quoteRefreshing.current=false;});
-   }
-   // Main estimate request has a hard timeout; previously successful cached values remain visible.
+   // Update estimates first. Slow historical quote endpoints must not block the main fund values.
    const estimateOutcome=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store",signal:AbortSignal.timeout(15000)})
     .then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;})
     .catch(()=>null);
@@ -220,6 +195,19 @@ export default function FinancePage(){
     setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
     setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
    })().catch(()=>{});
+   // Refresh historical/published NAVs separately. They update cards when ready but do not hold the page's loading state.
+   if(!quoteRefreshing.current){
+    quoteRefreshing.current=true;
+    void Promise.all(codes.map(async code=>{
+     try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store",signal:AbortSignal.timeout(7000)});if(!response.ok)return null;return await response.json() as Quote;}
+     catch{return null;}
+    })).then(quoteOutcomes=>{
+     const newQuotes:Record<string,Quote>={};
+     for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
+     if(Object.keys(newQuotes).length)setQuotes(prev=>({...prev,...newQuotes}));
+     for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
+    }).catch(()=>{}).finally(()=>{quoteRefreshing.current=false;});
+   }
   }finally{refreshing.current=false;setLoading(false);}
  },[codes]);
  useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer);},[ready,codes,refresh]);
