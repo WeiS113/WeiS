@@ -17,6 +17,8 @@ const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
 const CURVES_KEY="weis-finance-intraday-curves-v2";
+const QUOTES_CACHE_KEY="weis-finance-quotes-cache-v1";
+const ESTIMATES_CACHE_KEY="weis-finance-estimates-cache-v1";
 const TRADES_KEY="weis-finance-voice-trades-v1";
 const GROUPS_KEY="weis-finance-groups-v1";
 const FUND_GROUPS_KEY="weis-finance-fund-groups-v1";
@@ -75,6 +77,14 @@ export default function FinancePage(){
    const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
   }catch{setCodes(INITIAL);}
+  // Restore last successful market data immediately, then refresh from providers in the background.
+  try{const cached=JSON.parse(localStorage.getItem(QUOTES_CACHE_KEY)||"{}") as Record<string,Quote>;if(cached&&typeof cached==="object")setQuotes(cached);}catch{}
+  try{
+   const cached=JSON.parse(localStorage.getItem(ESTIMATES_CACHE_KEY)||"{}") as Record<string,Estimate>;
+   const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+   const usable=Object.fromEntries(Object.entries(cached||{}).filter(([,e])=>e&&typeof e==="object"&&typeof e.code==="string"&&String(e.time||"").replaceAll("/","-").slice(0,10)===today));
+   setEstimates(usable);
+  }catch{}
   try{const saved=JSON.parse(localStorage.getItem(CURVES_KEY)||"{}") as Record<string,CurvePoint[]>;const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});const restored:Record<string,CurvePoint[]>={};for(const [code,arr] of Object.entries(saved)){if(!/^\d{6}$/.test(code)||!Array.isArray(arr))continue;restored[code]=arr.filter(p=>Number.isFinite(p.at)&&Number.isFinite(p.change)&&Number.isFinite(p.nav)&&p.nav>0&&new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===day&&marketMinute(p.at)!==null).slice(-360);}setCurves(restored);}catch{}
   try{const g=JSON.parse(localStorage.getItem(GROUPS_KEY)||'["默认分组"]');setGroups([...new Set(["默认分组",...(Array.isArray(g)?g.filter((x:unknown)=>typeof x==="string"&&x.trim()).map((x:string)=>x.trim()):[])])]);}catch{}
   try{const g=JSON.parse(localStorage.getItem(FUND_GROUPS_KEY)||"{}");setFundGroups(g&&typeof g==="object"&&!Array.isArray(g)?g:{});}catch{}
@@ -84,6 +94,8 @@ export default function FinancePage(){
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
  useEffect(()=>{if(ready){localStorage.setItem(GROUPS_KEY,JSON.stringify(groups));localStorage.setItem(FUND_GROUPS_KEY,JSON.stringify(fundGroups));}},[ready,groups,fundGroups]);
  useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
+ useEffect(()=>{if(ready&&Object.keys(quotes).length)localStorage.setItem(QUOTES_CACHE_KEY,JSON.stringify(quotes));},[ready,quotes]);
+ useEffect(()=>{if(ready&&Object.keys(estimates).length)localStorage.setItem(ESTIMATES_CACHE_KEY,JSON.stringify(estimates));},[ready,estimates]);
  useEffect(()=>{
   let cancelled=false;
   void supabase.auth.getUser().then(async ({data,error})=>{
