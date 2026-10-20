@@ -76,7 +76,10 @@ export async function GET(request:NextRequest){
   if(/股票|混合/.test(text))return "equity";
   return "unknown";
  };
- const types=await Promise.all(codes.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
+ // Classification is only needed for fallback estimators. Avoid two extra provider requests
+ // for every fund when the primary valuation sources already returned valid data.
+ const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0);
+ const types=await Promise.all(needsClassification.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
  const knownType=new Map(types.map(x=>[x.code,x.type]));
  const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&knownType.get(code)==="equity").slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
