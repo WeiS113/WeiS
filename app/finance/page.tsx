@@ -165,18 +165,21 @@ export default function FinancePage(){
   void pull();const timer=setInterval(()=>void pull(),180000);
   return()=>{active=false;clearInterval(timer);};
  },[ready,codes,expanded]);
+ const quoteRefreshing=useRef(false);
  const refresh=useCallback(async()=>{
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
   try{
-   const [estimateOutcome,quoteOutcomes]=await Promise.all([
-    fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;}).catch(()=>null),
-    Promise.all(codes.map(async code=>{try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"});if(!response.ok)return null;return await response.json() as Quote;}catch{return null;}}))
-   ]);
-   const newQuotes:Record<string,Quote>={};
-   for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
-   setQuotes(prev=>({...prev,...newQuotes}));
-   // Load cloud curves in the background; never hold up quote/estimate rendering on history reads.
+   // Update estimates first. Slow historical quote endpoints must not block the main fund values.
+   const estimateOutcome=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store",signal:AbortSignal.timeout(15000)})
+    .then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;})
+    .catch(()=>null);
+   const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
+   setCurves(prev=>{const next={...prev};const now=Date.now();const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!valid(e.estimatedNav)||!isFresh(e.time)||!marketOpenNow())continue;const prior=(prev[e.code]||[]).filter(p=>new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===today&&marketMinute(p.at)!==null);if(prior.length&&now-prior[prior.length-1].at<30000){next[e.code]=prior;continue;}next[e.code]=[...prior,{at:now,change:e.change,nav:e.estimatedNav}].slice(-360);}return next;});
+   setEstimates(prev=>{const next={...prev};for(const e of obtained)next[e.code]=e;return next;});
+   setIssues(Object.fromEntries(codes.map(code=>{const e=obtained.find(x=>x.code===code);return [code,e?.change!=null&&valid(e.estimatedNav)?"":e?.diagnostic||(!estimateOutcome?"估值服务请求失败":"数据源暂未提供有效的盘中估算")];})));
+   setUpdated(new Date().toLocaleTimeString("zh-CN",{hour12:false}));
+   // Read the day's stored curve points in the background.
    void (async()=>{
     const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
     const start=new Date(day+"T00:00:00+08:00").toISOString();
@@ -192,19 +195,19 @@ export default function FinancePage(){
     setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
     setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
    })().catch(()=>{});
-   const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
-   setCurves(prev=>{const next={...prev};const now=Date.now();const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!valid(e.estimatedNav)||!isFresh(e.time)||!marketOpenNow())continue;const prior=(prev[e.code]||[]).filter(p=>new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===today&&marketMinute(p.at)!==null);if(prior.length&&now-prior[prior.length-1].at<30000){next[e.code]=prior;continue;}next[e.code]=[...prior,{at:now,change:e.change,nav:e.estimatedNav}].slice(-360);}return next;});
-   setEstimates(prev=>{
-    const next={...prev};
-    for(const e of obtained)next[e.code]=e;
-    return next;
-   });
-   setIssues(Object.fromEntries(codes.map(code=>{
-    const e=obtained.find(x=>x.code===code);
-    return [code,e?.change!=null&&valid(e.estimatedNav)?"":e?.diagnostic||(!estimateOutcome?"估值服务请求失败":"数据源暂未提供有效的盘中估算")];
-   })));
-   for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
-   setUpdated(new Date().toLocaleTimeString("zh-CN",{hour12:false}));
+   // Refresh historical/published NAVs separately. They update cards when ready but do not hold the page's loading state.
+   if(!quoteRefreshing.current){
+    quoteRefreshing.current=true;
+    void Promise.all(codes.map(async code=>{
+     try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store",signal:AbortSignal.timeout(7000)});if(!response.ok)return null;return await response.json() as Quote;}
+     catch{return null;}
+    })).then(quoteOutcomes=>{
+     const newQuotes:Record<string,Quote>={};
+     for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
+     if(Object.keys(newQuotes).length)setQuotes(prev=>({...prev,...newQuotes}));
+     for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
+    }).catch(()=>{}).finally(()=>{quoteRefreshing.current=false;});
+   }
   }finally{refreshing.current=false;setLoading(false);}
  },[codes]);
  useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer);},[ready,codes,refresh]);
