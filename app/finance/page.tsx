@@ -182,7 +182,20 @@ export default function FinancePage(){
   if(refreshing.current||codes.length===0)return;
   refreshing.current=true;setLoading(true);
   try{
-   // Update estimates first. Slow historical quote endpoints must not block the main fund values.
+   // Start published-NAV requests immediately in parallel; never wait for them before showing estimates.
+   if(!quoteRefreshing.current){
+    quoteRefreshing.current=true;
+    void Promise.all(codes.map(async code=>{
+     try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store",signal:AbortSignal.timeout(7000)});if(!response.ok)return null;return await response.json() as Quote;}
+     catch{return null;}
+    })).then(quoteOutcomes=>{
+     const newQuotes:Record<string,Quote>={};
+     for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
+     if(Object.keys(newQuotes).length)setQuotes(prev=>({...prev,...newQuotes}));
+     for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
+    }).catch(()=>{}).finally(()=>{quoteRefreshing.current=false;});
+   }
+   // Main estimate request has a hard timeout; previously successful cached values remain visible.
    const estimateOutcome=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store",signal:AbortSignal.timeout(15000)})
     .then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;})
     .catch(()=>null);
@@ -207,19 +220,6 @@ export default function FinancePage(){
     setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
     setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
    })().catch(()=>{});
-   // Refresh historical/published NAVs separately. They update cards when ready but do not hold the page's loading state.
-   if(!quoteRefreshing.current){
-    quoteRefreshing.current=true;
-    void Promise.all(codes.map(async code=>{
-     try{const response=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store",signal:AbortSignal.timeout(7000)});if(!response.ok)return null;return await response.json() as Quote;}
-     catch{return null;}
-    })).then(quoteOutcomes=>{
-     const newQuotes:Record<string,Quote>={};
-     for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
-     if(Object.keys(newQuotes).length)setQuotes(prev=>({...prev,...newQuotes}));
-     for(const q of quoteOutcomes)if(q?.name&&q.name!==q.code)setNames(prev=>prev[q.code]?prev:{...prev,[q.code]:q.name});
-    }).catch(()=>{}).finally(()=>{quoteRefreshing.current=false;});
-   }
   }finally{refreshing.current=false;setLoading(false);}
  },[codes]);
  useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer);},[ready,codes,refresh]);
