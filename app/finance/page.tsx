@@ -2,8 +2,11 @@
 import {useCallback,useEffect,useRef,useState} from "react";
 import Link from "next/link";
 import {supabase} from "../../lib/supabase";
-import VoiceFundTrade,{type VoiceTrade} from "../../components/VoiceFundTrade";
-import FinanceImageImport,{type Recognized} from "../../components/FinanceImageImport";
+import dynamic from "next/dynamic";
+import type {VoiceTrade} from "../../components/VoiceFundTrade";
+import type {Recognized} from "../../components/FinanceImageImport";
+const VoiceFundTrade=dynamic(()=>import("../../components/VoiceFundTrade"),{ssr:false,loading:()=>null});
+const FinanceImageImport=dynamic(()=>import("../../components/FinanceImageImport"),{ssr:false,loading:()=>null});
 type Holding={quantity:number;cost:number};
 type Entry={code:string;kind:"fund"|"stock"};
 type Quote={code:string;name:string;price:number|null;change:number|null;time:string|null;source:string};
