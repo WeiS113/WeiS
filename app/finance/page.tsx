@@ -173,6 +173,20 @@ export default function FinancePage(){
    const newQuotes:Record<string,Quote>={};
    for(const q of quoteOutcomes)if(q&&valid(q.price))newQuotes[q.code]=q;
    setQuotes(prev=>({...prev,...newQuotes}));
+   // Refresh today's cloud-collected curve points whenever the page opens or the user taps refresh.
+   const day=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
+   const start=new Date(day+"T00:00:00+08:00").toISOString();
+   const cloudCurves=await Promise.all(codes.map(async code=>{
+    try{
+     const {data,error}=await supabase.from("finance_intraday_points").select("at,nav,change_percent").eq("code",code).gte("at",start).order("at",{ascending:true}).limit(500);
+     if(error||!data)return null;
+     const points=data.map(p=>({at:Date.parse(String(p.at)),nav:Number(p.nav),change:Number(p.change_percent)})).filter(p=>Number.isFinite(p.at)&&valid(p.nav)&&Number.isFinite(p.change)&&marketMinute(p.at)!==null);
+     return {code,points};
+    }catch{return null;}
+   }));
+   setPlatformCurves(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]=result.points;return next;});
+   setPlatformDetails(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="Cloudflare 定时采集 · Supabase 已存 "+result.points.length+" 点";return next;});
+   setPlatformSources(prev=>{const next={...prev};for(const result of cloudCurves)if(result&&result.points.length)next[result.code]="云端历史估值";return next;});
    const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
    setCurves(prev=>{const next={...prev};const now=Date.now();const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});for(const e of obtained){if(e.change===null||!Number.isFinite(e.change)||!valid(e.estimatedNav)||!isFresh(e.time)||!marketOpenNow())continue;const prior=(prev[e.code]||[]).filter(p=>new Date(p.at).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})===today&&marketMinute(p.at)!==null);if(prior.length&&now-prior[prior.length-1].at<30000){next[e.code]=prior;continue;}next[e.code]=[...prior,{at:now,change:e.change,nav:e.estimatedNav}].slice(-360);}return next;});
    setEstimates(prev=>{
@@ -303,9 +317,6 @@ export default function FinancePage(){
         if(usable.length<2)return <p className="mt-3 text-xs text-slate-400">交易时段有效采样不足，无法显示连续走势。</p>;
         const values=usable.map(p=>p.nav),min=Math.min(...values),max=Math.max(...values),range=Math.max(max-min,0.0001);
         const toXY=(p:CurvePoint)=>(12+(marketMinute(p.at)??0)/240*316).toFixed(1)+","+(100-(p.nav-min)/range*72).toFixed(1);
-        const segments:CurvePoint[][]=[];let segment:CurvePoint[]=[];
-        for(const p of usable){if(segment.length&&((marketMinute(p.at)??0)-(marketMinute(segment[segment.length-1].at)??0)>5)){segments.push(segment);segment=[];}segment.push(p);}
-        if(segment.length)segments.push(segment);
         const first=usable[0],last=usable[usable.length-1];
         const hhmm=(at:number)=>new Date(at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false});
         const hovered=curveHover?.code===x.code?usable.find(p=>p.at===curveHover.at):undefined;
@@ -316,7 +327,7 @@ export default function FinancePage(){
         const tipY=hoverY<47?hoverY+8:Math.max(4,hoverY-43);
         return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"已采样时段的盘中估值变化；悬停曲线查看时间和估值"} className="mt-3 w-full touch-pan-y" onPointerMove={event=>{const rect=event.currentTarget.getBoundingClientRect();const pointerX=(event.clientX-rect.left)/Math.max(1,rect.width)*340;let nearest=usable[0];let distance=Infinity;for(const point of usable){const px=12+(marketMinute(point.at)??0)/240*316;const d=Math.abs(px-pointerX);if(d<distance){distance=d;nearest=point;}}if(nearest)setCurveHover({code:x.code,at:nearest.at});}} onPointerLeave={()=>setCurveHover(null)}>
           <line x1="12" x2="328" y1="100" y2="100" stroke="#e2e8f0"/>
-          {segments.filter(s=>s.length>=2).map((s,i)=><polyline key={i} points={s.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>)}
+          <polyline points={usable.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
           <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
           {hovered&&<g pointerEvents="none"><line x1={hoverX} x2={hoverX} y1="10" y2="100" stroke="#64748b" strokeDasharray="3 3" strokeOpacity=".9"/><line x1="12" x2="328" y1={hoverY} y2={hoverY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity=".7"/><circle cx={hoverX} cy={hoverY} r="3.5" fill={last.change>=0?"#e11d48":"#059669"} stroke="white" strokeWidth="1.5"/><rect x={tipX} y={tipY} width="120" height="36" rx="5" fill="#0f172a" fillOpacity=".95"/><text x={tipX+60} y={tipY+14} textAnchor="middle" fill="white" fontSize="10">{hoverTime}</text><text x={tipX+60} y={tipY+28} textAnchor="middle" fill="white" fontSize="10">估值 {hovered.nav.toFixed(4)}</text></g>}
         </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
