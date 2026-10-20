@@ -178,7 +178,7 @@ export default function FinancePage(){
   refreshing.current=true;setLoading(true);
   try{
    // Update estimates first. Slow historical quote endpoints must not block the main fund values.
-   const estimateOutcome=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store",signal:AbortSignal.timeout(15000)})
+   const estimateOutcome=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store",signal:AbortSignal.timeout(25000)})
     .then(async r=>{if(!r.ok)throw Error("估值接口不可用");return r.json() as Promise<{estimates:Estimate[]}>;})
     .catch(()=>null);
    const obtained=Array.isArray(estimateOutcome?.estimates)?estimateOutcome.estimates:[];
