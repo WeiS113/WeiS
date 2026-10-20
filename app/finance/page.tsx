@@ -13,6 +13,10 @@ type Quote={code:string;name:string;price:number|null;change:number|null;time:st
 type Estimate={code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;coverage?:number;stocks?:{code:string;name:string;weight:number;change:number}[]};
 type Search={code:string;name:string;kind:"fund"|"stock"};
 type CurvePoint={at:number;change:number;nav:number};
+type HistoricalNavPoint={date:string;close:number};
+type HistoricalReturnPoint={date:string;value:number;profit:number};
+type HistoricalReturnResult={startDate:string;endDate:string;startValue:number;endValue:number;profit:number;rate:number;points:HistoricalReturnPoint[];missing:string[]};
+function chinaDate(daysAgo=0){return new Date(Date.now()-daysAgo*86400000).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});}
 const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
@@ -61,6 +65,13 @@ export default function FinancePage(){
  const [cost,setCost]=useState("");
  const [message,setMessage]=useState("");
  const [sort,setSort]=useState<"custom"|"change"|"profit">("custom");
+ const [historyOpen,setHistoryOpen]=useState(false);
+ const [historyPeriod,setHistoryPeriod]=useState<"7"|"30"|"90"|"custom">("30");
+ const [historyStart,setHistoryStart]=useState(()=>chinaDate(30));
+ const [historyEnd,setHistoryEnd]=useState(()=>chinaDate());
+ const [historyLoading,setHistoryLoading]=useState(false);
+ const [historyError,setHistoryError]=useState("");
+ const [historyResult,setHistoryResult]=useState<HistoricalReturnResult|null>(null);
  const refreshing=useRef(false);
  const [cloudUser,setCloudUser]=useState<string|null>(null);
  const [cloudStatus,setCloudStatus]=useState("正在检查同步状态…");
@@ -268,6 +279,22 @@ export default function FinancePage(){
   setExpanded(trade.code);
   setMessage((trade.side==="buy"?"加仓":"减仓")+"已记账："+trade.name+"，金额 "+money(trade.amount)+"，折合 "+shares.toFixed(2)+" 份（未扣手续费）。");
  }
+ async function queryHistoricalReturns(){
+  const heldNow=codes.map(code=>({code,q:Number(holdings["fund"+code]?.quantity)||0})).filter(x=>x.q>0);
+  if(!heldNow.length){setHistoryError("请先录入至少一只基金的持有份额。");setHistoryResult(null);return;}
+  if(!historyStart||!historyEnd||historyStart>historyEnd){setHistoryError("请选择有效的查询日期范围。");setHistoryResult(null);return;}
+  setHistoryLoading(true);setHistoryError("");setHistoryResult(null);
+  try{
+   const responses=await Promise.all(heldNow.map(async h=>{const res=await fetch("/api/finance/fund-history?code="+h.code,{cache:"no-store",signal:AbortSignal.timeout(12000)});if(!res.ok)throw new Error((names[h.code]||h.code)+"历史净值获取失败");const data=await res.json();const points=(Array.isArray(data.points)?data.points:[]).filter((p:HistoricalNavPoint)=>/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0).sort((a:HistoricalNavPoint,b:HistoricalNavPoint)=>a.date.localeCompare(b.date));if(points.length<2)throw new Error((names[h.code]||h.code)+"历史净值不足");return {...h,points};}));
+   const startValue=responses.reduce((sum,h)=>{const p=[...h.points].reverse().find(p=>p.date<=historyStart);return sum+(p?p.close*h.q:0);},0);
+   const endValue=responses.reduce((sum,h)=>{const p=[...h.points].reverse().find(p=>p.date<=historyEnd);return sum+(p?p.close*h.q:0);},0);
+   const missing=responses.filter(h=>!h.points.some(p=>p.date<=historyStart)||!h.points.some(p=>p.date<=historyEnd)).map(h=>names[h.code]||h.code);
+   if(startValue<=0||endValue<=0)throw new Error("所选区间缺少足够的历史净值，请调整日期范围。");
+   const dates=[...new Set(responses.flatMap(h=>h.points.filter(p=>p.date>=historyStart&&p.date<=historyEnd).map(p=>p.date)))].sort();
+   const points=dates.map(date=>{const value=responses.reduce((sum,h)=>{const p=[...h.points].reverse().find(p=>p.date<=date);return sum+(p?p.close*h.q:0);},0);return {date,value,profit:value-startValue};}).filter(p=>p.value>0);
+   setHistoryResult({startDate:historyStart,endDate:historyEnd,startValue,endValue,profit:endValue-startValue,rate:(endValue-startValue)/startValue*100,points,missing});
+  }catch(e){setHistoryError(e instanceof Error?e.message:"历史持仓收益查询失败，请稍后重试。");}finally{setHistoryLoading(false);}
+ }
  function remove(code:string){
   if(!window.confirm("移除基金 "+code+"？已录入的持仓数据会保留，重新添加后仍可恢复。"))return;
   setCodes(old=>old.filter(x=>x!==code));setEditing(null);
@@ -299,13 +326,28 @@ export default function FinancePage(){
    <section className="mb-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold">跨设备持仓同步</p><p role="status" className="mt-1 text-xs text-slate-500">{cloudStatus}</p></div><div className="flex gap-2"><button type="button" disabled={!cloudUser} onClick={()=>void downloadCloud()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold disabled:opacity-40">载入云端</button><button type="button" disabled={!cloudUser} onClick={()=>void uploadCloud()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">上传本机</button></div></div></section>
    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>每 60 秒刷新 · 最近检查 {updated||"尚未获取"}</span><span>盘中估算不是基金官方净值；数据可能延迟</span></div>
    <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-    <p className="text-xs text-slate-500">今日预估收益 · 已覆盖 {todayHeld.length}/{held.length} 只持仓</p>
-    <p className={"mt-2 text-4xl font-bold tracking-tight tabular-nums "+positive(todayTotal)}>{todayHeld.length?(todayTotal>=0?"+":"")+money(todayTotal):"—"}</p>
+    <p className="text-[13px] font-medium leading-5 text-slate-500">今日预估收益 <span className="ml-1 font-normal text-slate-400">· 已覆盖 {todayHeld.length}/{held.length} 只持仓</span></p>
+    <p className={"mt-2 text-[34px] font-bold leading-tight tracking-tight tabular-nums sm:text-4xl "+positive(todayTotal)}>{todayHeld.length?(todayTotal>=0?"+":"")+money(todayTotal):"—"}</p>
     {!todayHeld.length&&held.length>0&&<p className="mt-2 text-xs leading-5 text-amber-700">暂未取得有效的当日估值，无法可靠计算今日收益。请展开基金查看具体数据源诊断；不会用历史涨幅代替今日收益。</p>}
     <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3">
-      <div><p className="text-xs text-slate-400">持仓总市值</p><p className="mt-1 text-lg font-semibold tabular-nums">{valueKnown.length?money(totalValue):"—"}</p></div>
-      <div><p className="text-xs text-slate-400">累计浮动盈亏</p><p className={"mt-1 text-lg font-semibold tabular-nums "+positive(totalProfit)}>{valueKnown.length?(totalProfit>=0?"+":"")+money(totalProfit):"—"}</p></div>
-      <div className="col-span-2 sm:col-span-1"><p className="text-xs text-slate-400">持仓成本</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(held.reduce((a,x)=>a+x.invested,0))}</p></div>
+      <div><p className="text-[13px] text-slate-400">持仓总市值</p><p className="mt-1 text-base font-semibold leading-6 tabular-nums sm:text-[17px]">{valueKnown.length?money(totalValue):"—"}</p></div>
+      <div><p className="text-[13px] text-slate-400">累计浮动盈亏</p><p className={"mt-1 text-base font-semibold leading-6 tabular-nums sm:text-[17px] "+positive(totalProfit)}>{valueKnown.length?(totalProfit>=0?"+":"")+money(totalProfit):"—"}</p></div>
+      <div className="col-span-2 sm:col-span-1"><p className="text-[13px] text-slate-400">持仓成本</p><p className="mt-1 text-base font-semibold leading-6 tabular-nums sm:text-[17px]">{money(held.reduce((a,x)=>a+x.invested,0))}</p></div>
+    </div>
+    <div className="mt-5 border-t border-slate-100 pt-4">
+     <button type="button" onClick={()=>setHistoryOpen(v=>!v)} aria-expanded={historyOpen} className="flex w-full items-center justify-between gap-3 rounded-xl px-1 py-2 text-left"><span><span className="block text-sm font-semibold text-slate-700">历史持仓收益查询</span><span className="mt-1 block text-xs text-slate-400">查询指定区间的持仓市值变化与估算收益</span></span><span className="text-sm text-slate-400">{historyOpen?"收起⌃":"查询⌄"}</span></button>
+     {historyOpen&&<div className="mt-3 rounded-xl bg-slate-50 p-3 sm:p-4">
+      <div className="flex flex-wrap gap-2">{([{value:"7",label:"近7天"},{value:"30",label:"近30天"},{value:"90",label:"近90天"},{value:"custom",label:"自定义"}] as const).map(item=><button key={item.value} type="button" onClick={()=>{setHistoryPeriod(item.value);if(item.value!=="custom"){setHistoryStart(chinaDate(Number(item.value)));setHistoryEnd(chinaDate());}}} className={"rounded-lg px-3 py-2 text-xs font-medium "+(historyPeriod===item.value?"bg-slate-800 text-white":"border border-slate-200 bg-white text-slate-600")}>{item.label}</button>)}</div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"><label className="text-xs text-slate-500">开始日期<input type="date" value={historyStart} max={historyEnd||chinaDate()} onChange={e=>{setHistoryPeriod("custom");setHistoryStart(e.target.value);}} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700"/></label><label className="text-xs text-slate-500">结束日期<input type="date" value={historyEnd} min={historyStart} max={chinaDate()} onChange={e=>{setHistoryPeriod("custom");setHistoryEnd(e.target.value);}} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700"/></label></div>
+      <button type="button" disabled={historyLoading} onClick={()=>void queryHistoricalReturns()} className="mt-3 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{historyLoading?"正在查询历史净值…":"查询历史收益"}</button>
+      {historyError&&<p role="status" className="mt-3 text-xs leading-5 text-amber-700">{historyError}</p>}
+      {historyResult&&<div className="mt-4 space-y-4"><p className="text-xs text-slate-500">{historyResult.startDate} 至 {historyResult.endDate} · 按当前持有份额回溯估算</p>
+       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-400">区间收益估算</p><p className={"mt-1 text-lg font-semibold tabular-nums "+positive(historyResult.profit)}>{historyResult.profit>=0?"+":""}{money(historyResult.profit)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-400">区间收益率</p><p className={"mt-1 text-lg font-semibold tabular-nums "+positive(historyResult.rate)}>{historyResult.rate>=0?"+":""}{historyResult.rate.toFixed(2)}%</p></div><div className="col-span-2 rounded-lg bg-white p-3 sm:col-span-1"><p className="text-xs text-slate-400">期末持仓市值估算</p><p className="mt-1 text-base font-semibold tabular-nums">{money(historyResult.endValue)}</p></div></div>
+       {historyResult.points.length>1&&(()=>{const pts=historyResult.points;const min=Math.min(...pts.map(p=>p.profit)),max=Math.max(...pts.map(p=>p.profit));const range=Math.max(max-min,0.01);const poly=pts.map((p,i)=>`${(4+i/(pts.length-1)*292).toFixed(1)},${(70-(p.profit-min)/range*54).toFixed(1)}`).join(" ");return <div className="rounded-lg bg-white p-3"><p className="text-xs font-medium text-slate-500">区间收益变化（估算）</p><svg viewBox="0 0 300 78" className="mt-2 h-24 w-full" role="img" aria-label="历史持仓收益估算趋势图"><line x1="4" y1={70-(0-min)/range*54} x2="296" y2={70-(0-min)/range*54} stroke="#cbd5e1" strokeDasharray="3 3"/><polyline points={poly} fill="none" stroke={historyResult.profit>=0?"#059669":"#e11d48"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg><div className="flex justify-between text-[11px] text-slate-400"><span>{pts[0].date}</span><span>{pts[pts.length-1].date}</span></div></div>})()}
+       {historyResult.missing.length>0&&<p className="text-xs leading-5 text-amber-700">以下基金在区间起止日期缺少对应净值，统计可能不完整：{historyResult.missing.join("、")}</p>}
+       <p className="text-[11px] leading-5 text-slate-400">注意：这是按当前份额与历史单位净值回溯的估算，不代表当时真实持仓；不包含区间内买卖、分红再投资、手续费及已卖出份额收益。历史净值可能不含盘中估值。</p>
+      </div>}
+     </div>}
     </div>
    </section>
    <FinanceImageImport onImport={importRecognized}/>
