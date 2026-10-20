@@ -301,6 +301,7 @@ export default function FinancePage(){
    <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
     <p className="text-xs text-slate-500">今日预估收益 · 已覆盖 {todayHeld.length}/{held.length} 只持仓</p>
     <p className={"mt-2 text-4xl font-bold tracking-tight tabular-nums "+positive(todayTotal)}>{todayHeld.length?(todayTotal>=0?"+":"")+money(todayTotal):"—"}</p>
+    {!todayHeld.length&&held.length>0&&<p className="mt-2 text-xs leading-5 text-amber-700">暂未取得有效的当日估值，无法可靠计算今日收益。请展开基金查看具体数据源诊断；不会用历史涨幅代替今日收益。</p>}
     <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3">
       <div><p className="text-xs text-slate-400">持仓总市值</p><p className="mt-1 text-lg font-semibold tabular-nums">{valueKnown.length?money(totalValue):"—"}</p></div>
       <div><p className="text-xs text-slate-400">累计浮动盈亏</p><p className={"mt-1 text-lg font-semibold tabular-nums "+positive(totalProfit)}>{valueKnown.length?(totalProfit>=0?"+":"")+money(totalProfit):"—"}</p></div>
