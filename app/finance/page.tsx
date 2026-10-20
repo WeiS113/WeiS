@@ -45,6 +45,7 @@ export default function FinancePage(){
  const [platformDetails,setPlatformDetails]=useState<Record<string,string>>({});
  const [platformSources,setPlatformSources]=useState<Record<string,string>>({});
  const [expanded,setExpanded]=useState<string|null>(null);
+ const [curveHover,setCurveHover]=useState<{code:string;at:number}|null>(null);
 
  const [updated,setUpdated]=useState("");
  const [input,setInput]=useState("");
@@ -307,10 +308,17 @@ export default function FinancePage(){
         if(segment.length)segments.push(segment);
         const first=usable[0],last=usable[usable.length-1];
         const hhmm=(at:number)=>new Date(at).toLocaleTimeString("zh-CN",{timeZone:"Asia/Shanghai",hour:"2-digit",minute:"2-digit",hour12:false});
-        return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"已采样时段的盘中估值变化；未采集时段留空"} className="mt-3 w-full">
+        const hovered=curveHover?.code===x.code?usable.find(p=>p.at===curveHover.at):undefined;
+        const hoverX=hovered?12+(marketMinute(hovered.at)??0)/240*316:0;
+        const hoverY=hovered?100-(hovered.nav-min)/range*72:0;
+        const hoverTime=hovered?hhmm(hovered.at):"";
+        const tipX=Math.max(8,Math.min(212,hoverX-60));
+        const tipY=hoverY<47?hoverY+8:Math.max(4,hoverY-43);
+        return <><svg viewBox="0 0 340 110" role="img" aria-label={x.name+"已采样时段的盘中估值变化；悬停曲线查看时间和估值"} className="mt-3 w-full touch-pan-y" onPointerMove={event=>{const rect=event.currentTarget.getBoundingClientRect();const pointerX=(event.clientX-rect.left)/Math.max(1,rect.width)*340;let nearest=usable[0];let distance=Infinity;for(const point of usable){const px=12+(marketMinute(point.at)??0)/240*316;const d=Math.abs(px-pointerX);if(d<distance){distance=d;nearest=point;}}if(nearest)setCurveHover({code:x.code,at:nearest.at});}} onPointerLeave={()=>setCurveHover(null)}>
           <line x1="12" x2="328" y1="100" y2="100" stroke="#e2e8f0"/>
           {segments.filter(s=>s.length>=2).map((s,i)=><polyline key={i} points={s.map(toXY).join(" ")} fill="none" stroke={last.change>=0?"#e11d48":"#059669"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>)}
           <circle cx={12+(marketMinute(last.at)??0)/240*316} cy={100-(last.nav-min)/range*72} r="3" fill={last.change>=0?"#e11d48":"#059669"}/>
+          {hovered&&<g pointerEvents="none"><line x1={hoverX} x2={hoverX} y1="10" y2="100" stroke="#64748b" strokeDasharray="3 3" strokeOpacity=".9"/><line x1="12" x2="328" y1={hoverY} y2={hoverY} stroke="#64748b" strokeDasharray="3 3" strokeOpacity=".7"/><circle cx={hoverX} cy={hoverY} r="3.5" fill={last.change>=0?"#e11d48":"#059669"} stroke="white" strokeWidth="1.5"/><rect x={tipX} y={tipY} width="120" height="36" rx="5" fill="#0f172a" fillOpacity=".95"/><text x={tipX+60} y={tipY+14} textAnchor="middle" fill="white" fontSize="10">{hoverTime}</text><text x={tipX+60} y={tipY+28} textAnchor="middle" fill="white" fontSize="10">估值 {hovered.nav.toFixed(4)}</text></g>}
         </svg><div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400"><span>09:30</span><span>最低 {min.toFixed(4)}</span><span>最高 {max.toFixed(4)}</span><span>15:00</span></div>
         <p className="mt-2 text-[11px] text-amber-700">{x.curveSource||"基金平台分时估值"}：{hhmm(first.at)}–{hhmm(last.at)}（{usable.length} 个点）。未采集时段留空；估算曲线不等于基金官方净值。</p></>;
       })():<p className="mt-3 rounded-lg bg-slate-50 px-3 py-4 text-xs text-slate-400">基金平台未返回足够的当日分时估值数据；不会使用本机采样冒充平台全天走势。{platformDetails[x.code]&&<span className="mt-2 block text-amber-700">{platformDetails[x.code]}</span>}</p>}</div>
