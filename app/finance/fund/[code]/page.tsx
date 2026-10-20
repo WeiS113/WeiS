@@ -20,6 +20,7 @@ export default function FundDetails(){
  const [estimatedAt,setEstimatedAt]=useState("");
  const [dailyLimit,setDailyLimit]=useState(10);
  const [heldShares,setHeldShares]=useState<number|null>(null);
+ useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem("weis-finance-portfolio-v2")||"null");const savedName=saved?.names?.[code];if(typeof savedName==="string"&&savedName.trim())setName(savedName.trim());}catch{}},[code]);
  useEffect(()=>{if(!/^\d{6}$/.test(code)){setError("基金代码无效");setBusy(false);return;}let active=true;setBusy(true);setError("");
   void Promise.allSettled([
    fetch("/api/finance/fund-history?code="+code,{cache:"no-store"}).then(async r=>{if(!r.ok)throw Error("历史净值接口不可用");return r.json()}),
