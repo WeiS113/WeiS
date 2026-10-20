@@ -51,10 +51,20 @@ async function fallbackFundGz(code){
  }catch(err){console.warn("fundgz fallback failed",code,String(err));return null;}
 }
 async function collect(env){
- if(!marketOpen())return;
  if(!env.SUPABASE_URL||!env.SUPABASE_SERVICE_ROLE_KEY||!env.WEIS_SITE_URL)throw Error("Missing Worker secrets");
  const api=supabaseRestBase(env.SUPABASE_URL);
  const headers={apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:"Bearer "+env.SUPABASE_SERVICE_ROLE_KEY};
+ // Keep only the most recent 72 hours of automatically collected intraday points.
+ // This runs on the scheduled Worker even when the market is closed.
+ const cutoff=new Date(Date.now()-3*24*60*60*1000).toISOString();
+ const cleanupUrl=new URL(api+"/finance_intraday_points");
+ cleanupUrl.searchParams.set("at","lt."+cutoff);
+ try{
+  const cleanup=await fetch(cleanupUrl,{method:"DELETE",headers:{...headers,Prefer:"return=minimal"},signal:AbortSignal.timeout(8000)});
+  if(!cleanup.ok)console.error("intraday retention cleanup failed",cleanup.status,(await cleanup.text()).slice(0,300));
+  else console.log("intraday retention cleanup complete",{olderThan:cutoff,status:cleanup.status});
+ }catch(err){console.error("intraday retention cleanup error",String(err));}
+ if(!marketOpen())return;
  const portfoliosUrl=api+"/finance_portfolios?select=codes";
  const portfolios=await fetch(portfoliosUrl,{headers});
  if(!portfolios.ok){const body=(await portfolios.text()).slice(0,800);console.error("Cannot load watchlists",{status:portfolios.status,url:portfoliosUrl,body});throw Error("Cannot load watchlists: "+portfolios.status+" "+body);}
