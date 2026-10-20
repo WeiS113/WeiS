@@ -55,11 +55,17 @@ export async function GET(request:NextRequest){
  const hosts=["https://fundcomapi.tiantianfunds.com/mm/newCore/FundValuationLast","https://fundcomapi.eastmoney.com/mm/newCore/FundValuationLast"];
  const output=new Map<string,Estimate>();
  // Independent probes: evaluate freshness and agreement before picking a candidate.
+ // Start the independent fundgz fallback at the same time as the primary providers.
+ // Previously this request ran only after classification and holdings-based estimation,
+ // so the browser's 15-second timeout could discard the entire response before it arrived.
+ const fundGzResultsPromise=Promise.all(codes.map(async code=>({code,value:await queryFundGz(code)})));
  const responses=await Promise.all(hosts.map(async host=>{
   try{return await query(host,codes);}catch{return new Map<string,Estimate>();}
  }));
  const candidates=new Map<string,Estimate[]>();
  for(const code of codes)candidates.set(code,responses.map(r=>r.get(code)).filter((e):e is Estimate=>Boolean(e&&e.estimatedNav!==null&&e.change!==null&&e.time)));
+ const fundGzResults=await fundGzResultsPromise;
+ const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
  const classify=async(code:string,nameHint=""):Promise<string>=>{
   const urls=["FundMNDetailInformation","FundMNBasicInformation"].map(path=>
    "https://fundmobapi.eastmoney.com/FundMNewApi/"+path+"?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0");
@@ -78,21 +84,17 @@ export async function GET(request:NextRequest){
  };
  // Classification is only needed for fallback estimators. Avoid two extra provider requests
  // for every fund when the primary valuation sources already returned valid data.
- const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0);
+ const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const types=await Promise.all(needsClassification.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
  const knownType=new Map(types.map(x=>[x.code,x.type]));
- const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&knownType.get(code)==="equity").slice(0,12);
+ const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&knownType.get(code)==="equity").slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
   let reason="没有有效股票持仓估算";
   const result=await estimateFromHoldings(code,msg=>{reason=msg;});
   return {code,result,reason};
  }));
  const proxyByCode=new Map(proxies.map(x=>[x.code,x]));
- const fundGzCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0);
- const fundGzResults=await Promise.all(fundGzCodes.map(async code=>({code,value:await queryFundGz(code)})));
- const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
-
- const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0);
+ const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
