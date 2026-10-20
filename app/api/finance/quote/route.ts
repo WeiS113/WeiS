@@ -47,13 +47,13 @@ export async function GET(request: NextRequest) {
           });
           if(backup.ok){
             const raw=await backup.text();
-            const found=raw.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+            const found=raw.match(/Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
             if(found){
               const rows=JSON.parse(found[1]) as {x?:number;y?:number;equityReturn?:number}[];
               const last=rows.at(-1);
               if(last&&num(last.y)!>0&&Number.isFinite(last.x)){
                 const date=new Date(last.x!).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
-                const named=raw.match(/(?:var\\s+)?fS_name\\s*=\\s*["']([^"']+)["']/);
+                const named=raw.match(/(?:var\s+)?fS_name\s*=\s*["']([^"']+)["']/);
                 result={code,name:String(data?.SHORTNAME||named?.[1]||code),kind,price:Number(last.y),change:num(last.equityReturn),time:date,source:"最新公布净值（公开净值历史备用源）"};
                 return NextResponse.json(result,{headers:{"Cache-Control":"no-store"}});
               }
