@@ -113,9 +113,26 @@ export default function FinancePage(){
     setCloudUser(uid);
     const {data:remote,error:readError}=await supabase.from("finance_portfolios").select("codes,names,holdings,updated_at").eq("user_id",uid).maybeSingle();
     if(cancelled)return;
-    if(readError){setCloudStatus("云端表未就绪或读取失败："+readError.message);return;}
-    if(remote){setCloudStatus("发现云端持仓。请选择“载入云端”或“上传本机”，避免覆盖数据。");}
-    else{setCloudStatus("当前云端暂无持仓，请点击“上传本机”开始跨设备同步。");}
+    if(readError){setCloudStatus("云端读取失败："+readError.message);return;}
+    if(remote){
+     // Automatically restore the existing cloud portfolio and enable sync.
+     const cloudCodes=Array.isArray(remote.codes)?remote.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[];
+     const cloudNames=remote.names&&typeof remote.names==="object"&&!Array.isArray(remote.names)?remote.names as Record<string,string>:{};
+     const cloudHoldings=remote.holdings&&typeof remote.holdings==="object"&&!Array.isArray(remote.holdings)?remote.holdings as Record<string,Holding>:{};
+     setCodes(cloudCodes);setNames(cloudNames);setHoldings(cloudHoldings);
+     try{localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes:cloudCodes,names:cloudNames}));localStorage.setItem(HOLDINGS_KEY,JSON.stringify(cloudHoldings));}catch{}
+     setCloudReady(true);setCloudStatus("已自动载入云端持仓；新增、导入和删除将自动同步。");
+    }else{
+     // First-time setup: initialize the cloud from the current local portfolio.
+     let local:{codes?:string[];names?:Record<string,string>}|null=null;let localHoldings:Record<string,Holding>={};
+     try{local=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null");localHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");}catch{}
+     const localCodes=Array.isArray(local?.codes)?local!.codes!.filter(x=>/^\d{6}$/.test(x)):[...codes];
+     const localNames=local?.names&&typeof local.names==="object"?local.names:names;
+     const {error:writeError}=await supabase.from("finance_portfolios").upsert({user_id:uid,codes:localCodes,names:localNames,holdings:localHoldings,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+     if(cancelled)return;
+     if(writeError){setCloudStatus("首次云端同步失败："+writeError.message);return;}
+     setCloudReady(true);setCloudStatus("已自动初始化云端同步；新增、导入和删除将自动同步。");
+    }
   }).catch(()=>{if(!cancelled)setCloudStatus("无法连接账户数据库，当前仅保存在本机。");});
   return()=>{cancelled=true;};
  },[]);
