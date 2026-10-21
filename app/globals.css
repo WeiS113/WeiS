@@ -107,6 +107,11 @@ a {
     font-size: 16px !important; /* prevents Safari auto-zoom */
   }
 
+  /* Finance group controls: keep selects and button text visually identical on mobile. */
+  .finance-group-control {
+    font-size: 13px !important;
+  }
+
   button {
     min-height: 40px;
   }
