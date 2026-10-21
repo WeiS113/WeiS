@@ -79,11 +79,10 @@ export default function FinancePage(){
  const cloudBusy=useRef(false);
  useEffect(()=>{
   try{
-   const old=JSON.parse(localStorage.getItem(WATCH_KEY)||"[]") as Entry[];
-   const existing=Array.isArray(old)?old.filter(x=>x.kind==="fund"&&/^\d{6}$/.test(x.code)).map(x=>x.code):[];
    const saved=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null") as {codes?:string[];names?:Record<string,string>}|null;
    const restored=Array.isArray(saved?.codes)?saved.codes.filter(x=>/^\d{6}$/.test(x)):[];
-   setCodes([...new Set([...restored,...existing,...(existing.length||restored.length?[]:INITIAL)])]);
+   // Legacy watchlist is separate from holdings; merging it resurrected removed funds.
+   setCodes([...new Set(restored.length?restored:INITIAL)]);
    setNames(saved?.names&&typeof saved.names==="object"?saved.names:{});
    const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
@@ -296,8 +295,10 @@ export default function FinancePage(){
   }catch(e){setHistoryError(e instanceof Error?e.message:"历史持仓收益查询失败，请稍后重试。");}finally{setHistoryLoading(false);}
  }
  function remove(code:string){
-  if(!window.confirm("移除基金 "+code+"？已录入的持仓数据会保留，重新添加后仍可恢复。"))return;
-  setCodes(old=>old.filter(x=>x!==code));setEditing(null);
+  if(!window.confirm("移除基金 "+code+"？将从持仓和旧版自选列表中移除；份额与成本记录会保留，重新添加后仍可恢复。"))return;
+  setCodes(old=>old.filter(x=>x!==code));
+  try{const saved=JSON.parse(localStorage.getItem(WATCH_KEY)||"[]") as Entry[];if(Array.isArray(saved))localStorage.setItem(WATCH_KEY,JSON.stringify(saved.filter(x=>x.code!==code)));}catch{}
+  setEditing(null);
  }
  const positions=codes.map(code=>{
   const holding=holdings["fund"+code]??{quantity:0,cost:0};
