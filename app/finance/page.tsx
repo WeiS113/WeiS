@@ -20,6 +20,7 @@ function chinaDate(daysAgo=0){return new Date(Date.now()-daysAgo*86400000).toLoc
 const HOLDINGS_KEY="weis-finance-holdings";
 const WATCH_KEY="weis-finance-watchlist";
 const PORTFOLIO_KEY="weis-finance-portfolio-v2";
+const REMOVED_CODES_KEY="weis-finance-removed-codes-v1";
 const CURVES_KEY="weis-finance-intraday-curves-v2";
 const QUOTES_CACHE_KEY="weis-finance-quotes-cache-v1";
 const ESTIMATES_CACHE_KEY="weis-finance-estimates-cache-v1";
@@ -81,8 +82,10 @@ export default function FinancePage(){
   try{
    const saved=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null") as {codes?:string[];names?:Record<string,string>}|null;
    const restored=Array.isArray(saved?.codes)?saved.codes.filter(x=>/^\d{6}$/.test(x)):[];
-   // Legacy watchlist is separate from holdings; merging it resurrected removed funds.
-   setCodes([...new Set(restored.length?restored:INITIAL)]);
+   const removedRaw=JSON.parse(localStorage.getItem(REMOVED_CODES_KEY)||"[]");
+   const removed=new Set(Array.isArray(removedRaw)?removedRaw.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[]);
+   // A local removal tombstone takes precedence over stale portfolio/watchlist copies.
+   setCodes([...new Set((restored.length?restored:INITIAL).filter(code=>!removed.has(code)))]);
    setNames(saved?.names&&typeof saved.names==="object"?saved.names:{});
    const oldHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setHoldings(oldHoldings&&typeof oldHoldings==="object"?oldHoldings:{});
@@ -132,7 +135,10 @@ export default function FinancePage(){
   cloudBusy.current=false;
   if(error||!data){setCloudStatus("读取失败或云端尚无数据："+(error?.message??"无数据"));return;}
   if(!window.confirm("载入云端持仓会替换当前设备上的基金列表、份额与成本，继续吗？"))return;
-  const savedCodes=Array.isArray(data.codes)?data.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[];
+  let removedCodes:string[]=[];
+  try{const raw=JSON.parse(localStorage.getItem(REMOVED_CODES_KEY)||"[]");removedCodes=Array.isArray(raw)?raw.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[];}catch{}
+  const removedSet=new Set(removedCodes);
+  const savedCodes=Array.isArray(data.codes)?data.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)&&!removedSet.has(x)):[];
   setCodes(savedCodes);
   setNames(data.names&&typeof data.names==="object"&&!Array.isArray(data.names)?data.names as Record<string,string>:{});
   setHoldings(data.holdings&&typeof data.holdings==="object"&&!Array.isArray(data.holdings)?data.holdings as Record<string,Holding>:{});
@@ -243,6 +249,7 @@ export default function FinancePage(){
  function add(code:string,name?:string){
   if(!/^\d{6}$/.test(code)){setMessage("请输入正确的六位基金代码");return;}
   if(codes.includes(code)){setMessage("已在我的基金中");return;}
+  try{const raw=JSON.parse(localStorage.getItem(REMOVED_CODES_KEY)||"[]");const removed=Array.isArray(raw)?raw.filter((x:unknown)=>x!==code):[];localStorage.setItem(REMOVED_CODES_KEY,JSON.stringify(removed));}catch{}
   setCodes(old=>[code,...old]);if(name)setNames(old=>({...old,[code]:name}));setInput("");setResults([]);setMessage("");
  }
  function edit(code:string){setEditing(code);setQuant(String(holdings["fund"+code]?.quantity??""));setCost(String(holdings["fund"+code]?.cost??""));setMessage("");}
@@ -295,8 +302,10 @@ export default function FinancePage(){
   }catch(e){setHistoryError(e instanceof Error?e.message:"历史持仓收益查询失败，请稍后重试。");}finally{setHistoryLoading(false);}
  }
  function remove(code:string){
-  if(!window.confirm("移除基金 "+code+"？将从持仓和旧版自选列表中移除；份额与成本记录会保留，重新添加后仍可恢复。"))return;
+  if(!window.confirm("移除基金 "+code+"？将从持仓列表、旧版自选列表和后续恢复数据中移除；份额与成本记录会保留。"))return;
   setCodes(old=>old.filter(x=>x!==code));
+  // Persist a tombstone so stale local/cloud snapshots cannot resurrect this code.
+  try{const raw=JSON.parse(localStorage.getItem(REMOVED_CODES_KEY)||"[]");const removed=Array.isArray(raw)?raw.filter((x:unknown)=>typeof x==="string"):[];localStorage.setItem(REMOVED_CODES_KEY,JSON.stringify([...new Set([...removed,code])]));}catch{}
   try{const saved=JSON.parse(localStorage.getItem(WATCH_KEY)||"[]") as Entry[];if(Array.isArray(saved))localStorage.setItem(WATCH_KEY,JSON.stringify(saved.filter(x=>x.code!==code)));}catch{}
   setEditing(null);
  }
