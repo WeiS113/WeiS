@@ -337,7 +337,7 @@ export default function FinancePage(){
   const market=nav!==null?q*nav:null;
   const profit=market!==null?market-invested:null;
   const today=base!==null?q*(nav!-base):null;
-  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:null,time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:platformCurves[code]?.length?platformCurves[code]:(curves[code]||[]),curveSource:platformCurves[code]?.length?(platformSources[code]||"云端分时历史"):((curves[code]?.length??0)>0?"本机实时采样（仅在页面打开期间）":""),stocks:estimate?.stocks||[],coverage:estimate?.coverage,group:fundGroups[code]||"默认分组"};
+  return {code,name:names[code]||estimate?.name||quote?.name||code,q,c,invested,market,profit,today,nav,live,change:live?estimate!.change:(quote?.change!==null&&quote?.change!==undefined&&Number.isFinite(quote.change)?quote.change:null),time:live?estimate!.time:quote?.time||null,source:live?estimate!.source:quote?.source||"无有效数据",curve:platformCurves[code]?.length?platformCurves[code]:(curves[code]||[]),curveSource:platformCurves[code]?.length?(platformSources[code]||"云端分时历史"):((curves[code]?.length??0)>0?"本机实时采样（仅在页面打开期间）":""),stocks:estimate?.stocks||[],coverage:estimate?.coverage,group:fundGroups[code]||"默认分组"};
  });
  const held=positions.filter(x=>x.q>0);
  const valueKnown=held.filter(x=>x.market!==null);
