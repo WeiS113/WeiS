@@ -138,7 +138,7 @@ export default function TasksPage() {
     void microsoftAction("status", false);
     const params = new URLSearchParams(window.location.search);
     const result = params.get("microsoftTodo");
-    if (result === "connected") setMicrosoftMessage("Microsoft To Do 已连接，请点击同步导入现有任务。");
+    if (result === "connected") setMicrosoftMessage("Microsoft To Do 已连接，正在自动同步现有任务…");
     else if (result === "denied") setMicrosoftMessage("你取消了微软授权。");
     else if (result === "error") setMicrosoftMessage("微软连接失败，请检查应用配置后重试。");
     if (result) {
@@ -169,6 +169,7 @@ export default function TasksPage() {
       if (!response.ok) throw new Error(result.error || "Microsoft To Do 操作失败");
       if (action === "status") {
         setMicrosoftConnected(!!result.connected);
+        if (result.connected) await microsoftAction("sync", false);
       } else if (action === "connect") {
         window.location.href = result.url;
         return;
