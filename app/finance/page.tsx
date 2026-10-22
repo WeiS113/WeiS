@@ -250,7 +250,7 @@ export default function FinancePage(){
    }
   }finally{refreshing.current=false;setLoading(false);}
  },[codes]);
- useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),60000);return()=>clearInterval(timer);},[ready,codes,refresh]);
+ useEffect(()=>{if(!ready||codes.length===0)return;void refresh();const timer=setInterval(()=>void refresh(),300000);return()=>clearInterval(timer);},[ready,codes,refresh]);
  useEffect(()=>{
   const q=input.trim();if(q.length<2){setResults([]);return;}
   let stopped=false;const timer=setTimeout(()=>{
@@ -351,7 +351,7 @@ export default function FinancePage(){
   <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4"><div><Link href="/" className="text-xs text-slate-400">WeiS /</Link><h1 className="text-xl font-bold">我的基金账户</h1></div><button type="button" disabled={loading} onClick={()=>void refresh()} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading?"更新中…":"↻ 刷新行情"}</button></div></header>
   <div className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
    <section className="mb-4 rounded-xl border border-slate-200 bg-white p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold">跨设备持仓同步</p><p role="status" className="mt-1 text-xs text-slate-500">{cloudStatus}</p></div><div className="flex gap-2"><button type="button" disabled={!cloudUser} onClick={()=>void downloadCloud()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold disabled:opacity-40">载入云端</button><button type="button" disabled={!cloudUser} onClick={()=>void uploadCloud()} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">上传本机</button></div></div></section>
-   <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>每 60 秒刷新 · 最近检查 {updated||"尚未获取"}</span><span>盘中估算不是基金官方净值；数据可能延迟</span></div>
+   <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>每 5 分钟刷新 · 最近检查 {updated||"尚未获取"}</span><span>盘中估算不是基金官方净值；数据可能延迟</span></div>
    <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
     <p className="text-[13px] font-medium leading-5 text-slate-500">今日预估收益 <span className="ml-1 font-normal text-slate-400">· 已覆盖 {todayHeld.length}/{held.length} 只持仓</span></p>
     <p className={"mt-2 text-[34px] font-bold leading-tight tracking-tight tabular-nums sm:text-4xl "+positive(todayTotal)}>{todayHeld.length?(todayTotal>=0?"+":"")+money(todayTotal):"—"}</p>
