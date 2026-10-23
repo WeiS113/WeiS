@@ -15,7 +15,8 @@ type WeightRecord = {
   note: string;
   created_at?: string;
 };
-type WeightProfile = { user_id: string; height_cm: number | null; target_weight_kg: number | null };
+type WeightProfile = { user_id: string; height_cm: number | null; target_weight_kg: number | null; birth_year: number | null; sex: string | null; activity_level: string | null; goal_type: string | null };
+type AIAnalysis = { summary: string; observations: string[]; suggestions: string[]; cautions: string[]; data_quality: string };
 const todayString = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -39,6 +40,14 @@ export default function WeightPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [height, setHeight] = useState("");
   const [goal, setGoal] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [sex, setSex] = useState("prefer_not");
+  const [activityLevel, setActivityLevel] = useState("moderate");
+  const [goalType, setGoalType] = useState("general");
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiGeneratedAt, setAiGeneratedAt] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [period, setPeriod] = useState<30 | 90 | 180 | 365>(90);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -52,7 +61,7 @@ export default function WeightPage() {
       setUserId(user.id);
       const [recordsResult, profileResult] = await Promise.all([
         supabase.from("weight_records").select("id,user_id,measured_on,weight_kg,waist_cm,body_fat_pct,note,created_at").eq("user_id", user.id).order("measured_on", { ascending: true }),
-        supabase.from("weight_profiles").select("user_id,height_cm,target_weight_kg").eq("user_id", user.id).maybeSingle(),
+        supabase.from("weight_profiles").select("user_id,height_cm,target_weight_kg,birth_year,sex,activity_level,goal_type").eq("user_id", user.id).maybeSingle(),
       ]);
       if (recordsResult.error) throw new Error(recordsResult.error.message.includes("weight_records") ? "体重记录数据表尚未创建。请先执行项目中的数据库迁移 SQL。" : recordsResult.error.message);
       if (profileResult.error) throw new Error(profileResult.error.message.includes("weight_profiles") ? "个人目标数据表尚未创建。请先执行项目中的数据库迁移 SQL。" : profileResult.error.message);
@@ -61,6 +70,10 @@ export default function WeightPage() {
       setProfile(p);
       setHeight(p?.height_cm == null ? "" : String(p.height_cm));
       setGoal(p?.target_weight_kg == null ? "" : String(p.target_weight_kg));
+      setBirthYear(p?.birth_year == null ? "" : String(p.birth_year));
+      setSex(p?.sex || "prefer_not");
+      setActivityLevel(p?.activity_level || "moderate");
+      setGoalType(p?.goal_type || "general");
     } catch (e) { setError(e instanceof Error ? e.message : "加载体重记录失败"); }
     finally { setLoading(false); }
   }, []);
@@ -132,17 +145,32 @@ export default function WeightPage() {
     setMessage("记录已删除。");
     await load();
   }
+  async function runAIAnalysis() {
+    setAiBusy(true); setAiError(""); setAiAnalysis(null);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error("请先登录 WeiS 账号。");
+      const response = await fetch("/api/weight/ai", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token }, body: "{}", cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "AI 分析失败。");
+      setAiAnalysis(result.analysis as AIAnalysis); setAiGeneratedAt(result.generatedAt || new Date().toISOString());
+    } catch (e) { setAiError(e instanceof Error ? e.message : "AI 分析暂时不可用。"); }
+    finally { setAiBusy(false); }
+  }
+
   async function saveProfile(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(""); setMessage("");
-    const h = height ? Number(height) : null, g = goal ? Number(goal) : null;
+    const h = height ? Number(height) : null, g = goal ? Number(goal) : null, by = birthYear ? Number(birthYear) : null;
     if (h !== null && (!Number.isFinite(h) || h < 80 || h > 250)) { setError("身高需在 80–250 cm 之间。"); return; }
     if (g !== null && (!Number.isFinite(g) || g < 20 || g > 400)) { setError("目标体重需在 20–400 kg 之间。"); return; }
+    if (by !== null && (!Number.isInteger(by) || by < 1900 || by > new Date().getFullYear())) { setError("请输入有效的出生年份。"); return; }
     if (!userId) { setError("正在确认登录状态，请稍后重试。"); return; }
     setSaving(true);
-    const { error: saveError } = await supabase.from("weight_profiles").upsert({ user_id: userId, height_cm: h, target_weight_kg: g, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const { error: saveError } = await supabase.from("weight_profiles").upsert({ user_id: userId, height_cm: h, target_weight_kg: g, birth_year: by, sex, activity_level: activityLevel, goal_type: goalType, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     setSaving(false);
     if (saveError) { setError(saveError.message); return; }
-    setProfile({ user_id: userId, height_cm: h, target_weight_kg: g });
+    setProfile({ user_id: userId, height_cm: h, target_weight_kg: g, birth_year: by, sex, activity_level: activityLevel, goal_type: goalType });
     setProfileOpen(false); setMessage("个人信息与目标已保存。");
   }
 
