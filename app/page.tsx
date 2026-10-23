@@ -43,6 +43,15 @@ const modules = [
     colors: "from-emerald-200/70 via-teal-100/60 to-cyan-200/70",
     symbolColor: "text-emerald-600",
   },
+  {
+    title: "Anniversaries",
+    subtitle: "Remember what matters.",
+    description: "纪念日 · 生日 · 倒计时",
+    href: "/anniversaries",
+    symbol: "♡",
+    colors: "from-rose-200/70 via-pink-100/60 to-violet-200/70",
+    symbolColor: "text-rose-500",
+  },
 ];
 
 
