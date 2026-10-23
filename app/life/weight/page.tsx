@@ -41,6 +41,7 @@ export default function WeightPage() {
   const [goal, setGoal] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [period, setPeriod] = useState<30 | 90 | 180 | 365>(90);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -176,13 +177,14 @@ export default function WeightPage() {
 
       <section className="mb-5 rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">体重变化趋势</h2><p className="mt-1 text-xs text-slate-400">红色表示体重上升，绿色表示体重下降；触摸或移动鼠标查看记录点。</p></div><div className="flex gap-1">{([30,90,180,365] as const).map(n=><button key={n} type="button" onClick={()=>setPeriod(n)} className={period===n?"rounded-lg bg-slate-900 px-3 py-2 text-xs text-white":"rounded-lg bg-slate-100 px-3 py-2 text-xs"}>{n===365?"1年":n+"天"}</button>)}</div></div>
-        {loading ? <p className="py-12 text-center text-sm text-slate-400">正在加载记录…</p> : chart && chartRecords.length>=2 ? <svg viewBox="0 0 700 235" role="img" aria-label="体重历史变化曲线，可触摸查看数值" className="mt-5 w-full touch-pan-y select-none">
+        {loading ? <p className="py-12 text-center text-sm text-slate-400">正在加载记录…</p> : chart && chartRecords.length>=2 ? <svg viewBox="0 0 700 235" role="img" aria-label="体重历史变化曲线，可触摸查看数值" className="mt-5 w-full touch-pan-y select-none" onPointerMove={e=>{const rect=e.currentTarget.getBoundingClientRect();const x=(e.clientX-rect.left)/Math.max(1,rect.width)*700;let nearest=0,distance=Infinity;chart.points.forEach((p,i)=>{const d=Math.abs(p.x-x);if(d<distance){distance=d;nearest=i;}});setHoverIndex(nearest);}} onPointerLeave={()=>setHoverIndex(null)}>
           {[48,88,128,168].map(y=><line key={y} x1="28" x2="672" y1={y} y2={y} stroke="#94a3b8" strokeOpacity=".18" strokeDasharray="4 5"/>)}
           {chart.points.slice(1).map((p,i)=>{const prev=chart.points[i];return <line key={p.r.id} x1={prev.x} y1={prev.y} x2={p.x} y2={p.y} stroke={p.y<prev.y?"#e11d48":p.y>prev.y?"#059669":"#94a3b8"} strokeWidth="2.8" strokeLinecap="round"/>;})}
           {chart.points.map((p,i)=><circle key={p.r.id} cx={p.x} cy={p.y} r="3.5" fill={i===chart.points.length-1?"#0f172a":p.y<chart.points[Math.max(0,i-1)].y?"#e11d48":p.y>chart.points[Math.max(0,i-1)].y?"#059669":"#94a3b8"}/>)}
           <text x="28" y="22" fill="#64748b" fontSize="11">{chart.hi.toFixed(1)} kg</text><text x="28" y="211" fill="#64748b" fontSize="11">{chart.lo.toFixed(1)} kg</text>
           <text x="28" y="230" fill="#94a3b8" fontSize="10">{dateLabel(chartRecords[0].measured_on)}</text><text x="672" y="230" textAnchor="end" fill="#94a3b8" fontSize="10">{dateLabel(chartRecords[chartRecords.length-1].measured_on)}</text>
           {chart.points.map(p=><circle key={"hit-"+p.r.id} cx={p.x} cy={p.y} r="12" fill="transparent"><title>{p.r.measured_on} · {kg(Number(p.r.weight_kg))}{p.r.waist_cm ? ` · 腰围 ${p.r.waist_cm} cm` : ""}</title></circle>)}
+          {hoverIndex!==null&&chart.points[hoverIndex]&&(()=>{const p=chart.points[hoverIndex];const tx=Math.max(100,Math.min(600,p.x));const ty=p.y<85?p.y+12:p.y-54;const tipY=Math.max(4,Math.min(145,ty));return <g pointerEvents="none"><line x1={p.x} x2={p.x} y1="30" y2="195" stroke="#64748b" strokeDasharray="4 4" strokeOpacity=".75"/><circle cx={p.x} cy={p.y} r="5" fill={hoverIndex>0&&p.y<chart.points[hoverIndex-1].y?"#e11d48":hoverIndex>0&&p.y>chart.points[hoverIndex-1].y?"#059669":"#0f172a"} stroke="white" strokeWidth="2"/><rect x={tx-92} y={tipY} width="184" height="48" rx="7" fill="#0f172a" fillOpacity=".95"/><text x={tx} y={tipY+17} textAnchor="middle" fill="white" fontSize="11">{p.r.measured_on}</text><text x={tx} y={tipY+34} textAnchor="middle" fill="white" fontSize="12" fontWeight="600">{kg(Number(p.r.weight_kg))}{p.r.waist_cm!=null?" · 腰围 "+p.r.waist_cm+" cm":""}</text></g>;})()}
         </svg> : <div className="py-12 text-center"><p className="text-sm text-slate-500">{records.length===0?"记录两次或更多体重后，这里会显示趋势曲线。":"当前记录点不足，添加更多记录即可查看趋势。"}</p><p className="mt-2 text-xs text-slate-400">你可以补录过去的日期。</p></div>}
         {chartRecords.length>=2&&<div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-400"><span>区间变化：{(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)>0?"+":"")+(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)).toFixed(1)} kg</span><span>{chartRecords.length} 条记录</span></div>}
       </section>
