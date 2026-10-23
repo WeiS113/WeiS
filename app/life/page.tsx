@@ -31,6 +31,13 @@ const sections = [
     href: "/life/calendar",
     gradient: "from-sky-100 to-indigo-100",
   },
+  {
+    title: "Weight",
+    description: "记录体重，查看长期变化与目标进度",
+    icon: "⌁",
+    href: "/life/weight",
+    gradient: "from-rose-100 to-amber-100",
+  },
 ];
 
 
