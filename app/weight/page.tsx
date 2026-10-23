@@ -122,7 +122,7 @@ export default function WeightPage() {
     if (bf !== null && (!Number.isFinite(bf) || bf < 1 || bf > 75)) { setError("体脂率需在 1–75% 之间。"); return; }
     setSaving(true);
     try {
-      const payload = { user_id: userId, measured_on: date, weight_kg: w, waist_cm: wa, body_fat_pct: bf, note: note.trim(), updated_at: new Date().toISOString() };
+      const payload = { user_id: userId, measured_on: date, weight_kg: w, waist_cm: null, body_fat_pct: null, note: "", updated_at: new Date().toISOString() };
       const result = editingId
         ? await supabase.from("weight_records").update(payload).eq("id", editingId).eq("user_id", userId)
         : await supabase.from("weight_records").upsert(payload, { onConflict: "user_id,measured_on" });
@@ -184,15 +184,11 @@ export default function WeightPage() {
     } else suggestions.push("补充身高后可以计算 BMI，并在后续结合个人情况解读。");
     if (targetGap!=null) {
       observations.push("当前与目标体重相差 "+(targetGap>0?"+":"")+targetGap.toFixed(1)+" kg（正数表示当前高于目标）。");
-      if(Math.abs(targetGap)<0.5) suggestions.push("当前体重接近你设置的目标，建议观察长期稳定性，并结合腰围、体脂率和主观状态评估。");
+      if(Math.abs(targetGap)<0.5) suggestions.push("当前体重接近你设置的目标，建议观察长期稳定性和日常状态。");
       else if(profile?.goal_type==="fat_loss" && targetGap>0) suggestions.push("如果减脂是你的目标，优先关注可持续的生活习惯与数周趋势，避免激进节食。");
-      else if(profile?.goal_type==="muscle") suggestions.push("增肌目标下不要只看体重；可结合力量训练表现、腰围和体脂率共同评估。");
+      else if(profile?.goal_type==="muscle") suggestions.push("增肌目标下不要只看体重；也应结合力量训练表现、恢复和日常状态共同评估。");
       else suggestions.push("定期回顾目标是否仍适合你；不要只依据单次测量调整计划。");
     } else suggestions.push("设置目标体重后，可以持续追踪与目标的差距。");
-    const waistValues=sorted.filter(r=>r.waist_cm!=null);
-    if(waistValues.length>=2) observations.push("腰围从 "+Number(waistValues[0].waist_cm).toFixed(1)+" cm 变化至 "+Number(waistValues[waistValues.length-1].waist_cm).toFixed(1)+" cm。");
-    const bfValues=sorted.filter(r=>r.body_fat_pct!=null);
-    if(bfValues.length>=2) observations.push("体脂率从 "+Number(bfValues[0].body_fat_pct).toFixed(1)+"% 变化至 "+Number(bfValues[bfValues.length-1].body_fat_pct).toFixed(1)+"%。");
     if(profile?.activity_level==="low") suggestions.push("档案显示日常活动偏少；若身体条件允许，可从规律步行和减少久坐开始，逐步增加活动量。");
     else if(profile?.activity_level==="high") suggestions.push("活动量较高时，注意恢复、睡眠和充足营养，避免单纯追求体重数字。");
     else suggestions.push("尽量在相近时间、相近条件下测量（例如晨起如厕后），并用每周或每月趋势降低日常波动的干扰。");
@@ -263,8 +259,8 @@ export default function WeightPage() {
           {chart.points.map((p,i)=><circle key={p.r.id} cx={p.x} cy={p.y} r="3.5" fill={i===chart.points.length-1?"#0f172a":p.y<chart.points[Math.max(0,i-1)].y?"#e11d48":p.y>chart.points[Math.max(0,i-1)].y?"#059669":"#94a3b8"}/>)}
           <text x="28" y="22" fill="#64748b" fontSize="11">{chart.hi.toFixed(1)} kg</text><text x="28" y="211" fill="#64748b" fontSize="11">{chart.lo.toFixed(1)} kg</text>
           <text x="28" y="230" fill="#94a3b8" fontSize="10">{dateLabel(chartRecords[0].measured_on)}</text><text x="672" y="230" textAnchor="end" fill="#94a3b8" fontSize="10">{dateLabel(chartRecords[chartRecords.length-1].measured_on)}</text>
-          {chart.points.map(p=><circle key={"hit-"+p.r.id} cx={p.x} cy={p.y} r="12" fill="transparent"><title>{p.r.measured_on} · {kg(Number(p.r.weight_kg))}{p.r.waist_cm ? ` · 腰围 ${p.r.waist_cm} cm` : ""}</title></circle>)}
-          {hoverIndex!==null&&chart.points[hoverIndex]&&(()=>{const p=chart.points[hoverIndex];const tx=Math.max(100,Math.min(600,p.x));const ty=p.y<85?p.y+12:p.y-54;const tipY=Math.max(4,Math.min(145,ty));return <g pointerEvents="none"><line x1={p.x} x2={p.x} y1="30" y2="195" stroke="#64748b" strokeDasharray="4 4" strokeOpacity=".75"/><circle cx={p.x} cy={p.y} r="5" fill={hoverIndex>0&&p.y<chart.points[hoverIndex-1].y?"#e11d48":hoverIndex>0&&p.y>chart.points[hoverIndex-1].y?"#059669":"#0f172a"} stroke="white" strokeWidth="2"/><rect x={tx-92} y={tipY} width="184" height="48" rx="7" fill="#0f172a" fillOpacity=".95"/><text x={tx} y={tipY+17} textAnchor="middle" fill="white" fontSize="11">{p.r.measured_on}</text><text x={tx} y={tipY+34} textAnchor="middle" fill="white" fontSize="12" fontWeight="600">{kg(Number(p.r.weight_kg))}{p.r.waist_cm!=null?" · 腰围 "+p.r.waist_cm+" cm":""}</text></g>;})()}
+          {chart.points.map(p=><circle key={"hit-"+p.r.id} cx={p.x} cy={p.y} r="12" fill="transparent"><title>{p.r.measured_on} · {kg(Number(p.r.weight_kg))}</title></circle>)}
+          {hoverIndex!==null&&chart.points[hoverIndex]&&(()=>{const p=chart.points[hoverIndex];const tx=Math.max(100,Math.min(600,p.x));const ty=p.y<85?p.y+12:p.y-54;const tipY=Math.max(4,Math.min(145,ty));return <g pointerEvents="none"><line x1={p.x} x2={p.x} y1="30" y2="195" stroke="#64748b" strokeDasharray="4 4" strokeOpacity=".75"/><circle cx={p.x} cy={p.y} r="5" fill={hoverIndex>0&&p.y<chart.points[hoverIndex-1].y?"#e11d48":hoverIndex>0&&p.y>chart.points[hoverIndex-1].y?"#059669":"#0f172a"} stroke="white" strokeWidth="2"/><rect x={tx-92} y={tipY} width="184" height="48" rx="7" fill="#0f172a" fillOpacity=".95"/><text x={tx} y={tipY+17} textAnchor="middle" fill="white" fontSize="11">{p.r.measured_on}</text><text x={tx} y={tipY+34} textAnchor="middle" fill="white" fontSize="12" fontWeight="600">{kg(Number(p.r.weight_kg))}</text></g>;})()}
         </svg> : <div className="py-12 text-center"><p className="text-sm text-slate-500">{records.length===0?"记录两次或更多体重后，这里会显示趋势曲线。":"当前记录点不足，添加更多记录即可查看趋势。"}</p><p className="mt-2 text-xs text-slate-400">你可以补录过去的日期。</p></div>}
         {chartRecords.length>=2&&<div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-400"><span>区间变化：{(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)>0?"+":"")+(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)).toFixed(1)} kg</span><span>{chartRecords.length} 条记录</span></div>}
       </section>
@@ -275,16 +271,13 @@ export default function WeightPage() {
         <form onSubmit={saveRecord} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs text-slate-500">记录日期<input required type="date" max={todayString()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
           <label className="text-xs text-slate-500">体重（kg）*<input required type="number" min="20" max="400" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="例如 68.5" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <label className="text-xs text-slate-500">腰围（cm，可选）<input type="number" min="20" max="300" step="0.1" value={waist} onChange={e=>setWaist(e.target.value)} placeholder="例如 82" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <label className="text-xs text-slate-500">体脂率（%，可选）<input type="number" min="1" max="75" step="0.1" value={bodyFat} onChange={e=>setBodyFat(e.target.value)} placeholder="例如 22.5" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <label className="text-xs text-slate-500 sm:col-span-2">备注（可选）<textarea value={note} onChange={e=>setNote(e.target.value)} rows={2} maxLength={500} placeholder="例如：晨起空腹、运动后……" className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"/></label>
           <div className="flex flex-wrap gap-2 sm:col-span-2"><button disabled={saving} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-50">{saving?"保存中…":editingId?"保存修改":"保存记录"}</button>{editingId&&<button type="button" onClick={clearForm} className="rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600">取消编辑</button>}</div>
         </form>
       </section>
 
       <section className="rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">历史记录</h2><p className="mt-1 text-xs text-slate-400">共 {records.length} 条 · 最新记录在前</p></div><button type="button" onClick={()=>void load()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">刷新</button></div>
-        {loading ? <p className="py-8 text-sm text-slate-400">加载中…</p> : records.length===0 ? <p className="py-10 text-center text-sm text-slate-400">还没有体重记录，添加第一条吧。</p> : <div className="mt-3 divide-y divide-slate-100">{[...records].reverse().map(r=><article key={r.id} className="flex items-center justify-between gap-3 py-4"><button type="button" onClick={()=>editRecord(r)} className="min-w-0 flex-1 text-left"><p className="font-semibold tabular-nums">{kg(Number(r.weight_kg))}<span className="ml-2 text-xs font-normal text-slate-400">{dateLabel(r.measured_on)}</span></p><p className="mt-1 truncate text-xs text-slate-400">{[r.waist_cm!=null?`腰围 ${r.waist_cm} cm`:null,r.body_fat_pct!=null?`体脂 ${r.body_fat_pct}%`:null,r.note||null].filter(Boolean).join(" · ")||"点击编辑记录"}</p></button><div className="flex shrink-0 gap-2"><button type="button" onClick={()=>editRecord(r)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">编辑</button><button type="button" onClick={()=>void deleteRecord(r)} className="rounded-lg border border-rose-100 px-3 py-2 text-xs text-rose-600">删除</button></div></article>)}</div>}
+        {loading ? <p className="py-8 text-sm text-slate-400">加载中…</p> : records.length===0 ? <p className="py-10 text-center text-sm text-slate-400">还没有体重记录，添加第一条吧。</p> : <div className="mt-3 divide-y divide-slate-100">{[...records].reverse().map(r=><article key={r.id} className="flex items-center justify-between gap-3 py-4"><button type="button" onClick={()=>editRecord(r)} className="min-w-0 flex-1 text-left"><p className="font-semibold tabular-nums">{kg(Number(r.weight_kg))}<span className="ml-2 text-xs font-normal text-slate-400">{dateLabel(r.measured_on)}</span></p><p className="mt-1 truncate text-xs text-slate-400">{"点击编辑记录"}</p></button><div className="flex shrink-0 gap-2"><button type="button" onClick={()=>editRecord(r)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">编辑</button><button type="button" onClick={()=>void deleteRecord(r)} className="rounded-lg border border-rose-100 px-3 py-2 text-xs text-rose-600">删除</button></div></article>)}</div>}
       </section>
       <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">体重会受饮水、饮食、运动和测量时间影响。BMI 是粗略筛查指标，不能单独用于诊断；请尽量在相近条件下测量并结合长期趋势观察。</p>
     </div>
