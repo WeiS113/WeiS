@@ -10,6 +10,10 @@ type Anniversary = {
   user_id: string;
   title: string;
   event_date: string;
+  calendar_type?: "solar" | "lunar";
+  lunar_month?: number | null;
+  lunar_day?: number | null;
+  lunar_year?: number | null;
   category: "birthday" | "relationship" | "wedding" | "family" | "work" | "study" | "custom";
   repeats_yearly: boolean;
   note: string;
@@ -20,6 +24,23 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 };
 const dateText = (value: string) => value ? value.replace(/-/g, ".") : "—";
+function getLunarParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-u-ca-chinese", { month: "numeric", day: "numeric" }).formatToParts(date);
+  return { month: Number(parts.find(p => p.type === "month")?.value), day: Number(parts.find(p => p.type === "day")?.value) };
+}
+function lunarToSolar(year: number, month: number, day: number): string | null {
+  const date = new Date(year, 0, 1, 12), end = new Date(year + 1, 2, 1, 12);
+  for (; date <= end; date.setDate(date.getDate() + 1)) {
+    const p = getLunarParts(date);
+    if (p.month === month && p.day === day) return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+  }
+  return null;
+}
+function lunarDateLabel(month: number, day: number) {
+  const months=["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"];
+  const days=["初一","初二","初三","初四","初五","初六","初七","初八","初九","初十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十","廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"];
+  return "农历"+(months[month-1]||month+"月")+(days[day-1]||day);
+}
 const categoryNames: Record<Anniversary["category"], string> = {
   birthday: "生日", relationship: "恋爱纪念日", wedding: "结婚纪念日",
   family: "家庭", work: "工作", study: "学习", custom: "自定义"
@@ -58,6 +79,10 @@ export default function AnniversariesPage() {
   const [editingId,setEditingId] = useState<string|null>(null);
   const [title,setTitle] = useState("");
   const [eventDate,setEventDate] = useState(today());
+  const [calendarType,setCalendarType] = useState<"solar"|"lunar">("solar");
+  const [lunarYear,setLunarYear] = useState(String(new Date().getFullYear()));
+  const [lunarMonth,setLunarMonth] = useState("1");
+  const [lunarDay,setLunarDay] = useState("1");
   const [category,setCategory] = useState<Anniversary["category"]>("birthday");
   const [repeatsYearly,setRepeatsYearly] = useState(true);
   const [note,setNote] = useState("");
@@ -68,7 +93,7 @@ export default function AnniversariesPage() {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) { setError("请先登录 WeiS 账号，再查看个人纪念日。"); setLoading(false); return; }
     setUserId(user.id);
-    const {data,error:queryError}=await supabase.from("anniversaries").select("id,user_id,title,event_date,category,repeats_yearly,note,created_at").eq("user_id",user.id).order("event_date",{ascending:true});
+    const {data,error:queryError}=await supabase.from("anniversaries").select("id,user_id,title,event_date,calendar_type,lunar_month,lunar_day,lunar_year,category,repeats_yearly,note,created_at").eq("user_id",user.id).order("event_date",{ascending:true});
     if(queryError) setError("读取纪念日失败。请确认已执行纪念日数据库迁移。");
     else setItems((data||[]) as Anniversary[]);
     setLoading(false);
@@ -76,16 +101,23 @@ export default function AnniversariesPage() {
   useEffect(()=>{void load();},[load]);
   useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return ()=>window.clearInterval(timer);},[]);
 
-  function clearForm() { setEditingId(null);setTitle("");setEventDate(today());setCategory("birthday");setRepeatsYearly(true);setNote(""); }
-  function edit(item: Anniversary) { setEditingId(item.id);setTitle(item.title);setEventDate(item.event_date);setCategory(item.category);setRepeatsYearly(item.repeats_yearly);setNote(item.note||"");setMessage("");setError("");window.scrollTo({top:0,behavior:"smooth"}); }
+  function clearForm() { setEditingId(null);setTitle("");setEventDate(today());setCalendarType("solar");setLunarYear(String(new Date().getFullYear()));setLunarMonth("1");setLunarDay("1");setCategory("birthday");setRepeatsYearly(true);setNote(""); }
+  function edit(item: Anniversary) { setEditingId(item.id);setTitle(item.title);setEventDate(item.event_date);setCalendarType(item.calendar_type||"solar");setLunarYear(String(item.lunar_year||Number(item.event_date.slice(0,4))));setLunarMonth(String(item.lunar_month||1));setLunarDay(String(item.lunar_day||1));setCategory(item.category);setRepeatsYearly(item.repeats_yearly);setNote(item.note||"");setMessage("");setError("");window.scrollTo({top:0,behavior:"smooth"}); }
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();setError("");setMessage("");
-    if(!title.trim()||!eventDate){setError("请填写纪念日名称和日期。");return;}
+    const lunarM=Number(lunarMonth), lunarD=Number(lunarDay), lunarY=Number(lunarYear);
+    const actualDate=calendarType==="lunar"?lunarToSolar(lunarY,lunarM,lunarD):eventDate;
+    if(!title.trim()||!actualDate){setError(calendarType==="lunar"?"无法转换该农历日期，请检查年份、月份和日期。":"请填写纪念日名称和日期。");return;}
     if(!userId){setError("登录状态尚未确认，请刷新页面重试。");return;}
     setSaving(true);
-    const payload={user_id:userId,title:title.trim(),event_date:eventDate,category,repeats_yearly:repeatsYearly,note:note.trim(),updated_at:new Date().toISOString()};
-    const result=editingId?await supabase.from("anniversaries").update(payload).eq("id",editingId).eq("user_id",userId):await supabase.from("anniversaries").insert(payload);
-    if(result.error){setError("保存失败："+result.error.message);setSaving(false);return;}
+    const payload={user_id:userId,title:title.trim(),event_date:actualDate,calendar_type:calendarType,lunar_year:calendarType==="lunar"?lunarY:null,lunar_month:calendarType==="lunar"?lunarM:null,lunar_day:calendarType==="lunar"?lunarD:null,category,repeats_yearly:repeatsYearly,note:note.trim(),updated_at:new Date().toISOString()};
+    try {
+      const result=editingId?await supabase.from("anniversaries").update(payload).eq("id",editingId).eq("user_id",userId):await supabase.from("anniversaries").insert(payload);
+      if(result.error){setError("保存失败："+result.error.message+(result.error.code==="PGRST204"||result.error.code==="42703"?"。请先执行农历日期数据库迁移。":""));setSaving(false);return;}
+    } catch {
+      setError("连接 Supabase 失败（Failed to fetch）。请检查 Cloudflare Pages 的 NEXT_PUBLIC_SUPABASE_URL 与 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY 是否正确，并确认浏览器能访问 Supabase 项目。");
+      setSaving(false);return;
+    }
     setMessage(editingId?"纪念日已更新。":"纪念日已添加。");clearForm();await load();setSaving(false);
   }
   async function remove(item: Anniversary) {
@@ -119,7 +151,7 @@ export default function AnniversariesPage() {
         <p className="mt-1 text-xs text-slate-400">生日、相识日、结婚纪念日，或任何对你有意义的日期。</p>
         <form onSubmit={save} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs text-slate-500">纪念日名称<input required maxLength={100} value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：我的生日、相识纪念日" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <label className="text-xs text-slate-500">日期<input required type="date" value={eventDate} onChange={e=>setEventDate(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
+          <div className="sm:col-span-2 rounded-2xl border border-slate-200 p-3"><div className="mb-3 flex gap-2"><button type="button" onClick={()=>setCalendarType("solar")} className={"rounded-lg px-4 py-2 text-sm "+(calendarType==="solar"?"bg-slate-900 text-white":"bg-slate-100 text-slate-600")}>公历</button><button type="button" onClick={()=>setCalendarType("lunar")} className={"rounded-lg px-4 py-2 text-sm "+(calendarType==="lunar"?"bg-rose-500 text-white":"bg-slate-100 text-slate-600")}>农历</button></div>{calendarType==="solar"?<label className="block text-xs text-slate-500">公历日期<input required type="date" value={eventDate} onChange={e=>setEventDate(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>:<div className="grid grid-cols-3 gap-2"><label className="text-xs text-slate-500">农历年份<input type="number" min="1900" max="2100" value={lunarYear} onChange={e=>setLunarYear(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800"/></label><label className="text-xs text-slate-500">农历月份<select value={lunarMonth} onChange={e=>setLunarMonth(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800">{["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"].map((m,i)=><option key={m} value={i+1}>{m}</option>)}</select></label><label className="text-xs text-slate-500">农历日期<select value={lunarDay} onChange={e=>setLunarDay(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-800">{Array.from({length:30},(_,i)=><option key={i+1} value={i+1}>{lunarDateLabel(Number(lunarMonth),i+1).replace(/^农历/,"").replace(/^(正月|二月|三月|四月|五月|六月|七月|八月|九月|十月|冬月|腊月)/,"")}</option>)}</select></label></div>}{calendarType==="lunar"&&<p className="mt-2 text-xs leading-5 text-slate-400">农历日期将转换为公历日期保存；闰月暂按对应月份的非闰月处理。</p>}</div>
           <label className="text-xs text-slate-500">类型<select value={category} onChange={e=>setCategory(e.target.value as Anniversary["category"])} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"><option value="birthday">生日</option><option value="relationship">恋爱纪念日</option><option value="wedding">结婚纪念日</option><option value="family">家庭</option><option value="work">工作</option><option value="study">学习</option><option value="custom">自定义</option></select></label>
           <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-600"><input type="checkbox" checked={repeatsYearly} onChange={e=>setRepeatsYearly(e.target.checked)} className="h-4 w-4 accent-rose-500"/>每年重复（生日、周年纪念日等）</label>
           <label className="text-xs text-slate-500 sm:col-span-2">备注（可选）<textarea maxLength={500} rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="留下一点关于这个日子的记忆……" className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800"/></label>
