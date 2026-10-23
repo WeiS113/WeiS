@@ -36,7 +36,6 @@ export default function WeightPage() {
   const [weight, setWeight] = useState("");
   const [waist, setWaist] = useState("");
   const [bodyFat, setBodyFat] = useState("");
-  const [note, setNote] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [height, setHeight] = useState("");
   const [goal, setGoal] = useState("");
@@ -104,13 +103,12 @@ export default function WeightPage() {
   }, [chartRecords]);
 
   function clearForm() {
-    setEditingId(null); setDate(todayString()); setWeight(""); setWaist(""); setBodyFat(""); setNote("");
+    setEditingId(null); setDate(todayString()); setWeight(""); setWaist(""); setBodyFat("");
   }
   function editRecord(r: WeightRecord) {
     setEditingId(r.id); setDate(r.measured_on); setWeight(String(r.weight_kg));
     setWaist(r.waist_cm == null ? "" : String(r.waist_cm));
     setBodyFat(r.body_fat_pct == null ? "" : String(r.body_fat_pct));
-    setNote(r.note ?? "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function saveRecord(e: FormEvent<HTMLFormElement>) {
