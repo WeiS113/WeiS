@@ -57,6 +57,37 @@ const categoryIcons: Record<Anniversary["category"], string> = {
   study: "📚",
   custom: "🌷"
 };
+const emojiLibrary = ["🌷","🌸","🌹","🌻","🌈","✨","💖","💕","💗","💝","❤️","🫶","🥰","🎉","🎁","🎂","🎓","💍","🏡","👶","🐶","🐱","🐾","✈️","🌍","🏖️","🏠","💼","📚","🏆","🎯","☕","🍀","🌙","⭐","🎄","🧧","🕯️","🎵","🎨","📷","💌"];
+function suggestEmoji(value: string) {
+  const s = value.toLowerCase();
+  if (/恋|爱|相识|对象|伴侣|情人/.test(s)) return "💕";
+  if (/生日|出生/.test(s)) return "🎂";
+  if (/结婚|婚礼/.test(s)) return "💍";
+  if (/家|家庭|父母/.test(s)) return "🏡";
+  if (/毕业|学校|学习|考试/.test(s)) return "🎓";
+  if (/工作|入职|升职/.test(s)) return "💼";
+  if (/旅行|旅游|出发/.test(s)) return "✈️";
+  if (/宠物|猫|狗/.test(s)) return "🐾";
+  if (/宝宝|孩子/.test(s)) return "👶";
+  if (/纪念|礼物/.test(s)) return "🎁";
+  return "🌷";
+}
+function iconFor(item: Pick<Anniversary, "category" | "custom_emoji">) {
+  return item.category === "custom" ? (item.custom_emoji || categoryIcons.custom) : categoryIcons[item.category];
+}
+function nameFor(item: Pick<Anniversary, "category" | "custom_category">) {
+  return item.category === "custom" && item.custom_category?.trim() ? item.custom_category : categoryNames[item.category];
+}
+function countCaption(item: Anniversary & { timing: { days: number; elapsedYears: number | null } }, now: Date) {
+  if (item.count_mode === "forward") {
+    const elapsed = getForwardDays(item, now);
+    const anniversary = item.repeats_yearly && item.timing.elapsedYears !== null && item.timing.elapsedYears > 0 ? `已度过第 ${item.timing.elapsedYears} 周年 · ` : "";
+    return anniversary + `正向计时 ${elapsed} 天`;
+  }
+  if (item.repeats_yearly) return item.timing.days === 0 ? "今天值得纪念" : `距离下次还有 ${item.timing.days} 天`;
+  return item.timing.days < 0 ? `已过去 ${Math.abs(item.timing.days)} 天` : `倒计时 ${item.timing.days} 天`;
+}
+
 function getTiming(item: Anniversary, now: Date) {
   const [y,m,d] = item.event_date.split("-").map(Number);
   const original = new Date(y,m-1,d,12);
@@ -209,7 +240,7 @@ export default function AnniversariesPage() {
 
       <section className="rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">我的纪念日</h2><p className="mt-1 text-xs text-slate-400">共 {items.length} 个 · 按下次到来时间排序</p></div><button type="button" onClick={()=>void load()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">刷新</button></div>
-        {loading?<p className="py-10 text-center text-sm text-slate-400">正在加载纪念日…</p>:items.length===0?<div className="py-12 text-center"><p className="text-3xl">♡</p><p className="mt-3 text-sm text-slate-500">还没有纪念日，添加第一个重要日子吧。</p></div>:<div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">{ordered.map(item=><article key={item.id} className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-rose-50/40 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-slate-400">{nameFor(item)} · {item.calendar_type==="lunar"&&item.lunar_month&&item.lunar_day?lunarDateLabel(item.lunar_month,item.lunar_day):dateText(item.event_date)}</p><h3 className="mt-2 truncate text-lg font-semibold">{iconFor(item)} {item.title}</h3>{item.note&&<p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-slate-500">{item.note}</p>}</div><div className="shrink-0 text-right"><p className="text-2xl font-semibold tabular-nums text-rose-500">{item.count_mode==="forward"?(getForwardDays(item,now)===0?"今天":getForwardDays(item,now)):item.timing.days===0?"今天":item.timing.days>0?item.timing.days:Math.abs(item.timing.days)}</p><p className="text-xs text-slate-500">{item.count_mode==="forward"?(getForwardDays(item,now)===0?"从今天开始":`已过去 ${getForwardDays(item,now)} 天`):item.timing.days===0?"就是今天":item.timing.days>0?"天后":"天前"}</p></div></div><div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><p className="text-xs text-slate-500">{item.count_mode==="forward" ? ((item.repeats_yearly && item.timing.elapsedYears!==null && item.timing.elapsedYears>0 ? `已度过第 ${item.timing.elapsedYears} 周年 · ` : "") + `正向计时 ${getForwardDays(item,now)} 天`) : (item.repeats_yearly ? (item.timing.days===0 ? "今天值得纪念" : `距离下次还有 ${item.timing.days} 天`) : item.timing.days<0 ? `已过去 ${Math.abs(item.timing.days)} 天` : `倒计时 ${item.timing.days} 天`) + (item.repeats_yearly && item.timing.elapsedYears!==null && item.timing.elapsedYears>0 ? ` · 第 ${item.timing.elapsedYears} 周年` : "")}</p><div className="flex gap-2"><button type="button" onClick={()=>edit(item)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">编辑</button><button type="button" onClick={()=>void remove(item)} className="rounded-lg border border-rose-100 px-3 py-2 text-xs text-rose-600">删除</button></div></div></article>)}</div>}
+        {loading?<p className="py-10 text-center text-sm text-slate-400">正在加载纪念日…</p>:items.length===0?<div className="py-12 text-center"><p className="text-3xl">♡</p><p className="mt-3 text-sm text-slate-500">还没有纪念日，添加第一个重要日子吧。</p></div>:<div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">{ordered.map(item=><article key={item.id} className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-rose-50/40 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-slate-400">{nameFor(item)} · {item.calendar_type==="lunar"&&item.lunar_month&&item.lunar_day?lunarDateLabel(item.lunar_month,item.lunar_day):dateText(item.event_date)}</p><h3 className="mt-2 truncate text-lg font-semibold">{iconFor(item)} {item.title}</h3>{item.note&&<p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-slate-500">{item.note}</p>}</div><div className="shrink-0 text-right"><p className="text-2xl font-semibold tabular-nums text-rose-500">{item.count_mode==="forward"?(getForwardDays(item,now)===0?"今天":getForwardDays(item,now)):item.timing.days===0?"今天":item.timing.days>0?item.timing.days:Math.abs(item.timing.days)}</p><p className="text-xs text-slate-500">{countCaption(item,now)}</p><div className="flex gap-2"><button type="button" onClick={()=>edit(item)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">编辑</button><button type="button" onClick={()=>void remove(item)} className="rounded-lg border border-rose-100 px-3 py-2 text-xs text-rose-600">删除</button></div></div></article>)}</div>}
       </section>
       <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">纪念日数据仅属于当前登录账号。倒计时按本地日期计算，每分钟更新显示。</p>
     </div>
