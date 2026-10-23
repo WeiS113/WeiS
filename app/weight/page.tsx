@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 type WeightRecord = {
   id: string;
