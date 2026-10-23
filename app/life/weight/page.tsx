@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 
@@ -101,7 +102,7 @@ export default function WeightPage() {
     setNote(r.note ?? "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  async function saveRecord(e: React.FormEvent<HTMLFormElement>) {
+  async function saveRecord(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(""); setMessage("");
     const w = Number(weight), wa = waist ? Number(waist) : null, bf = bodyFat ? Number(bodyFat) : null;
     if (!userId) { setError("正在确认登录状态，请稍后重试。"); return; }
@@ -130,7 +131,7 @@ export default function WeightPage() {
     setMessage("记录已删除。");
     await load();
   }
-  async function saveProfile(e: React.FormEvent<HTMLFormElement>) {
+  async function saveProfile(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(""); setMessage("");
     const h = height ? Number(height) : null, g = goal ? Number(goal) : null;
     if (h !== null && (!Number.isFinite(h) || h < 80 || h > 250)) { setError("身高需在 80–250 cm 之间。"); return; }
