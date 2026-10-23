@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import TrendLine from "../../../components/TrendLine";
 type Point = {date:string;close:number};
 type Fund = {code:string;name:string;points:Point[];error:string};
 function gain(points:Point[], span:number):string {
@@ -53,7 +54,7 @@ export default function ResearchPage(){
   {funds.some(f=>f.points.length>1)&&<section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
    <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">历史收益走势对比</h2><button type="button" onClick={()=>setShowChart(v=>!v)} className="rounded-lg bg-slate-100 px-3 py-2 text-xs">{showChart?"收起图表":"展开图表"}</button></div>
    {showChart&&<div className="mt-4">
-    <div className="mb-3 flex flex-wrap gap-3 text-xs">{funds.filter(f=>f.points.length>1).map((f,i)=><span key={f.code} style={{color:["#e11d48","#0284c7","#16a34a","#9333ea"][i%4]}}>● {f.code}</span>)}</div>
+    <div className="mb-3 flex flex-wrap gap-3 text-xs"><span className="text-rose-600">● 上涨</span><span className="text-emerald-600">● 下跌</span><span className="text-slate-500">各基金曲线按每一段涨跌着色</span></div>
     {(()=>{
       const series=funds.filter(f=>f.points.length>1).map((f,i)=>{
         const end=f.points[f.points.length-1];
@@ -63,7 +64,7 @@ export default function ResearchPage(){
         return {code:f.code,i,values:f.points.filter(p=>p.date>=anchor.date).map(p=>(p.close/anchor.close-1)*100)};
       });
       const all=series.flatMap(s=>s.values),min=Math.min(-1,...all),max=Math.max(1,...all);
-      return <svg viewBox="0 0 720 230" role="img" aria-label="所选基金历史收益率走势对比" className="w-full">{[0,1,2,3,4].map(j=><g key={j}><line x1="50" x2="700" y1={15+j*48} y2={15+j*48} stroke="#94a3b8" strokeOpacity=".25"/><text x="4" y={19+j*48} fontSize="10" fill="#64748b">{(max-(max-min)*j/4).toFixed(1)}%</text></g>)}{series.filter(s=>s.values.length>1).map(s=><polyline key={s.code} points={s.values.map((v,i)=>(50+i/(s.values.length-1)*650).toFixed(2)+","+(15+(max-v)/(max-min)*192).toFixed(2)).join(" ")} fill="none" stroke={["#e11d48","#0284c7","#16a34a","#9333ea"][s.i%4]} strokeWidth="2.5" strokeLinejoin="round"/>)}</svg>;
+      return <svg viewBox="0 0 720 230" role="img" aria-label="所选基金历史收益率走势对比" className="w-full">{[0,1,2,3,4].map(j=><g key={j}><line x1="50" x2="700" y1={15+j*48} y2={15+j*48} stroke="#94a3b8" strokeOpacity=".25"/><text x="4" y={19+j*48} fontSize="10" fill="#64748b">{(max-(max-min)*j/4).toFixed(1)}%</text></g>)}{series.filter(s=>s.values.length>1).map(s=><g key={s.code}><title>{s.code}</title><TrendLine points={s.values.map((v,i)=>(50+i/(s.values.length-1)*650).toFixed(2)+","+(15+(max-v)/(max-min)*192).toFixed(2)).join(" ")} strokeWidth={2.5} strokeLinejoin="round" strokeDasharray={s.i%2===0?undefined:"5 4"}/></g>)}</svg>;
     })()}
     <p className="mt-2 text-xs text-slate-400">仅依据已公布的历史单位净值，区间起点为最近可用净值日期；不是盘中实时曲线。</p>
    </div>}
