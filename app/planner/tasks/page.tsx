@@ -42,9 +42,6 @@ export default function TasksPage() {
   const [loading, setLoading] =
     useState(true);
 
-  const [microsoftConnected, setMicrosoftConnected] = useState(false);
-  const [microsoftBusy, setMicrosoftBusy] = useState(false);
-  const [microsoftMessage, setMicrosoftMessage] = useState("");
 
   // 新建任务
   const [title, setTitle] =
@@ -135,77 +132,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     void loadData();
-    void microsoftAction("status", false);
-    const params = new URLSearchParams(window.location.search);
-    const result = params.get("microsoftTodo");
-    if (result === "connected") setMicrosoftMessage("Microsoft To Do 已连接，正在自动同步现有任务…");
-    else if (result === "denied") setMicrosoftMessage("你取消了微软授权。");
-    else if (result === "error") setMicrosoftMessage("微软连接失败，请检查应用配置后重试。");
-    if (result) {
-      params.delete("microsoftTodo");
-      const query = params.toString();
-      window.history.replaceState({}, "", window.location.pathname + (query ? "?" + query : "") + window.location.hash);
-    }
   }, []);
-
-  useEffect(() => {
-    if (!microsoftConnected) return;
-    const timer = window.setInterval(() => { void microsoftAction("sync", false); }, 120000);
-    return () => window.clearInterval(timer);
-  }, [microsoftConnected]);
-
-  async function microsoftAction(action: "status" | "connect" | "sync" | "disconnect", showMessage = true) {
-    setMicrosoftBusy(true);
-    if (action === "connect") setMicrosoftMessage("正在检查登录状态并准备微软授权…");
-    else if (action === "sync" && showMessage) setMicrosoftMessage("正在连接微软并同步任务…");
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw new Error("读取 WeiS 登录状态失败：" + sessionError.message);
-      if (!session?.access_token) throw new Error("请先登录 WeiS 账号后再连接 Microsoft To Do");
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 20000);
-      let response: Response;
-      try {
-        response = await fetch("/api/microsoft-todo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
-          body: JSON.stringify({ action }),
-          cache: "no-store",
-          signal: controller.signal,
-        });
-      } finally {
-        window.clearTimeout(timeout);
-      }
-      const raw = await response.text();
-      let result: { url?: string; connected?: boolean; error?: string; counts?: { pulled?: number; pushed?: number; deleted?: number } };
-      try { result = JSON.parse(raw); }
-      catch { throw new Error("微软连接接口返回了非 JSON 内容（HTTP " + response.status + "）。请确认 Cloudflare 已部署最新代码。"); }
-      if (!response.ok) throw new Error(result.error || "Microsoft To Do 操作失败（HTTP " + response.status + "）");
-      if (action === "status") {
-        setMicrosoftConnected(!!result.connected);
-        if (result.connected) await microsoftAction("sync", false);
-      } else if (action === "connect") {
-        if (!result.url || !/^https:\/\/login\.microsoftonline\.com\//.test(result.url)) throw new Error("微软授权地址无效，请检查服务器配置");
-        setMicrosoftMessage("即将跳转到微软账号授权页面…");
-        window.location.assign(result.url);
-        return;
-      } else if (action === "sync") {
-        setMicrosoftConnected(true);
-        await loadData();
-        if (showMessage) setMicrosoftMessage(`同步完成：从微软导入 ${result.counts?.pulled ?? 0} 项，推送 ${result.counts?.pushed ?? 0} 项，删除/清理 ${result.counts?.deleted ?? 0} 项。`);
-      } else if (action === "disconnect") {
-        setMicrosoftConnected(false);
-        if (showMessage) setMicrosoftMessage("已断开 Microsoft To Do 连接；现有待办数据保留。");
-      }
-    } catch (error) {
-      const message = error instanceof DOMException && error.name === "AbortError"
-        ? "连接请求超时：Cloudflare API 20 秒内没有响应，请检查部署状态和函数日志。"
-        : error instanceof Error ? error.message : "Microsoft To Do 操作失败";
-      if (showMessage || action !== "sync") setMicrosoftMessage(message);
-    } finally {
-      setMicrosoftBusy(false);
-    }
-  }
 
   async function loadData() {
     setLoading(true);
@@ -343,7 +270,6 @@ export default function TasksPage() {
       ]);
     }
 
-    if (microsoftConnected) void microsoftAction("sync", false);
     setTitle("");
     setDueDate("");
     setDueTime("");
@@ -399,7 +325,6 @@ export default function TasksPage() {
       );
       return;
     }
-    if (microsoftConnected) void microsoftAction("sync", false);
   }
 
   async function deleteTask(
@@ -440,7 +365,6 @@ export default function TasksPage() {
       alert("删除失败");
       return;
     }
-    if (microsoftConnected) void microsoftAction("sync", false);
   }
 
   function startEditing(
@@ -547,7 +471,6 @@ export default function TasksPage() {
     );
 
     setEditingTaskId(null);
-    if (microsoftConnected) void microsoftAction("sync", false);
   }
 
   function getTodayString() {
@@ -1132,23 +1055,6 @@ export default function TasksPage() {
                 ? "取消"
                 : "+ 新建任务"}
             </button>
-          </div>
-
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold">Microsoft To Do</p>
-                <p className="mt-1 text-xs text-slate-500">{microsoftConnected ? "已连接 · 每 2 分钟自动双向同步" : "连接个人微软账号，同步网站与微软待办"}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {microsoftConnected ? <>
-                  <button type="button" disabled={microsoftBusy} onClick={() => void microsoftAction("sync")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{microsoftBusy ? "同步中…" : "立即同步"}</button>
-                  <button type="button" disabled={microsoftBusy} onClick={() => { if (window.confirm("断开 Microsoft To Do？网站现有待办不会删除。")) void microsoftAction("disconnect"); }} className="rounded-xl border px-3 py-2.5 text-sm text-slate-600 disabled:opacity-50">断开</button>
-                </> : <button type="button" disabled={microsoftBusy} onClick={() => void microsoftAction("connect")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{microsoftBusy ? "正在连接…" : "连接 Microsoft To Do"}</button>}
-              </div>
-            </div>
-            {microsoftMessage && <p role="status" className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">{microsoftMessage}</p>}
-            <p className="mt-2 text-[11px] leading-5 text-slate-400">同步任务标题、完成状态、日期/时间、优先级和标签。首次连接后，微软现有任务会导入网站；网站任务也会推送到微软。</p>
           </div>
 
           {showNewTask && (
