@@ -154,8 +154,8 @@ export default function WeightPage() {
     const recentDelta = Number(last.weight_kg)-Number(baseline.weight_kg);
     const spanDays = Math.max(1,Math.round((new Date(last.measured_on+"T12:00:00").getTime()-new Date(baseline.measured_on+"T12:00:00").getTime())/86400000));
     const weeklyRate = recent.length>1 ? recentDelta/spanDays*7 : null;
-    const last7 = sorted.filter(r=>new Date(r.measured_on+"T12:00:00")>=new Date(last.measured_on+"T12:00:00").getTime()-7*86400000);
-    const last30 = recent;
+    const last7Cutoff = new Date(last.measured_on+"T12:00:00").getTime()-7*86400000;
+    const last7 = sorted.filter(r=>new Date(r.measured_on+"T12:00:00").getTime()>=last7Cutoff);
     const mean = (arr: WeightRecord[]) => arr.length ? arr.reduce((s,r)=>s+Number(r.weight_kg),0)/arr.length : null;
     const currentBmi = profile?.height_cm ? Number(last.weight_kg)/Math.pow(Number(profile.height_cm)/100,2) : null;
     const targetGap = profile?.target_weight_kg==null ? null : Number(last.weight_kg)-Number(profile.target_weight_kg);
