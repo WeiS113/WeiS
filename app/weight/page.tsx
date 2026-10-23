@@ -236,6 +236,16 @@ export default function WeightPage() {
       {error && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">{error}</p>}
       {message && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
 
+      <section className="mb-5 rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-lg font-semibold">{editingId ? "编辑体重记录" : "新增体重记录"}</h2>
+        <p className="mt-1 text-xs text-slate-400">同一天只保留一条记录；再次保存同一日期会更新该记录。</p>
+        <form onSubmit={saveRecord} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="text-xs text-slate-500">记录日期<input required type="date" max={todayString()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
+          <label className="text-xs text-slate-500">体重（kg）*<input required type="number" min="20" max="400" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="例如 68.5" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2"><button disabled={saving} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-50">{saving?"保存中…":editingId?"保存修改":"保存记录"}</button>{editingId&&<button type="button" onClick={clearForm} className="rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600">取消编辑</button>}</div>
+        </form>
+      </section>
+
       <section className="mb-5 rounded-[26px] border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold tracking-[0.18em] text-violet-500">WEIS LOCAL INSIGHTS</p><h2 className="mt-1 text-lg font-semibold">体重趋势与规则分析</h2><p className="mt-1 text-xs leading-5 text-slate-500">免费本地计算，不调用外部 AI、不发送健康数据给模型服务。</p></div><button type="button" onClick={runLocalAnalysis} disabled={loading||records.length<2} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">生成分析</button></div>
         {records.length<2&&<p className="mt-3 rounded-xl bg-white/80 p-3 text-xs text-slate-500">至少录入两个不同日期的体重后，才能分析趋势。</p>}
@@ -263,15 +273,7 @@ export default function WeightPage() {
         {chartRecords.length>=2&&<div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-400"><span>区间变化：{(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)>0?"+":"")+(Number(chartRecords[chartRecords.length-1].weight_kg)-Number(chartRecords[0].weight_kg)).toFixed(1)} kg</span><span>{chartRecords.length} 条记录</span></div>}
       </section>
 
-      <section className="mb-5 rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
-        <h2 className="text-lg font-semibold">{editingId ? "编辑体重记录" : "新增体重记录"}</h2>
-        <p className="mt-1 text-xs text-slate-400">同一天只保留一条记录；再次保存同一日期会更新该记录。</p>
-        <form onSubmit={saveRecord} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-xs text-slate-500">记录日期<input required type="date" max={todayString()} value={date} onChange={e=>setDate(e.target.value)} className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <label className="text-xs text-slate-500">体重（kg）*<input required type="number" min="20" max="400" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} placeholder="例如 68.5" className="mt-1 block h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"/></label>
-          <div className="flex flex-wrap gap-2 sm:col-span-2"><button disabled={saving} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-50">{saving?"保存中…":editingId?"保存修改":"保存记录"}</button>{editingId&&<button type="button" onClick={clearForm} className="rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600">取消编辑</button>}</div>
-        </form>
-      </section>
+
 
       <section className="rounded-[26px] bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">历史记录</h2><p className="mt-1 text-xs text-slate-400">共 {records.length} 条 · 最新记录在前</p></div><button type="button" onClick={()=>void load()} className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">刷新</button></div>
