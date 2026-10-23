@@ -156,22 +156,38 @@ export default function TasksPage() {
 
   async function microsoftAction(action: "status" | "connect" | "sync" | "disconnect", showMessage = true) {
     setMicrosoftBusy(true);
+    if (action === "connect") setMicrosoftMessage("正在检查登录状态并准备微软授权…");
+    else if (action === "sync" && showMessage) setMicrosoftMessage("正在连接微软并同步任务…");
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("请先登录 WeiS 账号");
-      const response = await fetch("/api/microsoft-todo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
-        body: JSON.stringify({ action }),
-        cache: "no-store",
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Microsoft To Do 操作失败");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error("读取 WeiS 登录状态失败：" + sessionError.message);
+      if (!session?.access_token) throw new Error("请先登录 WeiS 账号后再连接 Microsoft To Do");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 20000);
+      let response: Response;
+      try {
+        response = await fetch("/api/microsoft-todo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+          body: JSON.stringify({ action }),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      const raw = await response.text();
+      let result: { url?: string; connected?: boolean; error?: string; counts?: { pulled?: number; pushed?: number; deleted?: number } };
+      try { result = JSON.parse(raw); }
+      catch { throw new Error("微软连接接口返回了非 JSON 内容（HTTP " + response.status + "）。请确认 Cloudflare 已部署最新代码。"); }
+      if (!response.ok) throw new Error(result.error || "Microsoft To Do 操作失败（HTTP " + response.status + "）");
       if (action === "status") {
         setMicrosoftConnected(!!result.connected);
         if (result.connected) await microsoftAction("sync", false);
       } else if (action === "connect") {
-        window.location.href = result.url;
+        if (!result.url || !/^https:\/\/login\.microsoftonline\.com\//.test(result.url)) throw new Error("微软授权地址无效，请检查服务器配置");
+        setMicrosoftMessage("即将跳转到微软账号授权页面…");
+        window.location.assign(result.url);
         return;
       } else if (action === "sync") {
         setMicrosoftConnected(true);
@@ -182,7 +198,10 @@ export default function TasksPage() {
         if (showMessage) setMicrosoftMessage("已断开 Microsoft To Do 连接；现有待办数据保留。");
       }
     } catch (error) {
-      if (showMessage || action !== "sync") setMicrosoftMessage(error instanceof Error ? error.message : "Microsoft To Do 操作失败");
+      const message = error instanceof DOMException && error.name === "AbortError"
+        ? "连接请求超时：Cloudflare API 20 秒内没有响应，请检查部署状态和函数日志。"
+        : error instanceof Error ? error.message : "Microsoft To Do 操作失败";
+      if (showMessage || action !== "sync") setMicrosoftMessage(message);
     } finally {
       setMicrosoftBusy(false);
     }
