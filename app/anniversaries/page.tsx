@@ -1,5 +1,7 @@
 "use client";
 
+// Build retry marker: anniversary JSX syntax was repaired in the preceding commit.
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
