@@ -16,7 +16,7 @@ type WeightRecord = {
   created_at?: string;
 };
 type WeightProfile = { user_id: string; height_cm: number | null; target_weight_kg: number | null; birth_year: number | null; sex: string | null; activity_level: string | null; goal_type: string | null };
-type AIAnalysis = { summary: string; observations: string[]; suggestions: string[]; cautions: string[]; data_quality: string };
+type LocalAnalysis = { summary: string; observations: string[]; suggestions: string[]; cautions: string[]; data_quality: string };
 const todayString = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -44,10 +44,7 @@ export default function WeightPage() {
   const [sex, setSex] = useState("prefer_not");
   const [activityLevel, setActivityLevel] = useState("moderate");
   const [goalType, setGoalType] = useState("general");
-  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiError, setAiError] = useState("");
-  const [aiGeneratedAt, setAiGeneratedAt] = useState("");
+  const [localAnalysis, setLocalAnalysis] = useState<LocalAnalysis | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [period, setPeriod] = useState<30 | 90 | 180 | 365>(90);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -145,18 +142,63 @@ export default function WeightPage() {
     setMessage("记录已删除。");
     await load();
   }
-  async function runAIAnalysis() {
-    setAiBusy(true); setAiError(""); setAiAnalysis(null);
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-      if (!session?.access_token) throw new Error("请先登录 WeiS 账号。");
-      const response = await fetch("/api/weight/ai", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token }, body: "{}", cache: "no-store" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "AI 分析失败。");
-      setAiAnalysis(result.analysis as AIAnalysis); setAiGeneratedAt(result.generatedAt || new Date().toISOString());
-    } catch (e) { setAiError(e instanceof Error ? e.message : "AI 分析暂时不可用。"); }
-    finally { setAiBusy(false); }
+  function runLocalAnalysis() {
+    const sorted = [...records].sort((a,b)=>a.measured_on.localeCompare(b.measured_on));
+    if (sorted.length < 2) { setLocalAnalysis(null); return; }
+    const last = sorted[sorted.length-1];
+    const prior = sorted[sorted.length-2];
+    const daysBetween = Math.max(1, Math.round((new Date(last.measured_on+"T12:00:00").getTime()-new Date(prior.measured_on+"T12:00:00").getTime())/86400000));
+    const recentCutoff = new Date(last.measured_on+"T12:00:00"); recentCutoff.setDate(recentCutoff.getDate()-30);
+    const recent = sorted.filter(r=>new Date(r.measured_on+"T12:00:00")>=recentCutoff);
+    const baseline = recent[0];
+    const recentDelta = Number(last.weight_kg)-Number(baseline.weight_kg);
+    const spanDays = Math.max(1,Math.round((new Date(last.measured_on+"T12:00:00").getTime()-new Date(baseline.measured_on+"T12:00:00").getTime())/86400000));
+    const weeklyRate = recent.length>1 ? recentDelta/spanDays*7 : null;
+    const last7 = sorted.filter(r=>new Date(r.measured_on+"T12:00:00")>=new Date(last.measured_on+"T12:00:00").getTime()-7*86400000);
+    const last30 = recent;
+    const mean = (arr: WeightRecord[]) => arr.length ? arr.reduce((s,r)=>s+Number(r.weight_kg),0)/arr.length : null;
+    const currentBmi = profile?.height_cm ? Number(last.weight_kg)/Math.pow(Number(profile.height_cm)/100,2) : null;
+    const targetGap = profile?.target_weight_kg==null ? null : Number(last.weight_kg)-Number(profile.target_weight_kg);
+    const observations: string[] = [];
+    const suggestions: string[] = [];
+    const cautions: string[] = [];
+    if (recent.length>=2) {
+      observations.push("近30天记录区间体重变化 "+(recentDelta>0?"+":"")+recentDelta.toFixed(1)+" kg，折算约 "+(weeklyRate!>0?"+":"")+weeklyRate!.toFixed(2)+" kg/周。");
+      if (weeklyRate! < -1) cautions.push("近期下降速度较快。体重变化可能包含水分等因素；若并非有意减重、持续下降或伴随不适，建议咨询专业人员。");
+      else if (weeklyRate! > 1) cautions.push("近期上升速度较快。先核对测量条件与记录完整性，不要仅凭短期变化判断脂肪增加。");
+      else observations.push("当前记录显示的周变化速度不大，但仍应结合更长时间趋势解读。");
+    } else {
+      observations.push("近30天有效记录不足两条，暂不能可靠估算近期变化速度；目前只分析累计趋势。");
+    }
+    if (sorted.length>=2) {
+      const total=Number(last.weight_kg)-Number(sorted[0].weight_kg);
+      observations.push("自首条记录（"+sorted[0].measured_on+"）以来累计变化 "+(total>0?"+":"")+total.toFixed(1)+" kg。");
+      if(daysBetween>14) cautions.push("最近两次记录间隔 "+daysBetween+" 天，短期趋势判断可信度有限。");
+    }
+    if (currentBmi!=null) {
+      const age=profile?.birth_year?new Date().getFullYear()-Number(profile.birth_year):null;
+      observations.push("按身高计算的 BMI 为 "+currentBmi.toFixed(1)+"。");
+      if(age!=null && age<18) cautions.push("档案年龄小于18岁，成人 BMI 参考范围不适用，建议由专业人员结合年龄与生长发育评估。");
+      else if(currentBmi<18.5) cautions.push("BMI 低于常用成人参考区间；BMI 不能单独用于诊断，应结合体成分和个人情况判断。");
+      else if(currentBmi>=24) cautions.push("BMI 高于常用成人中国参考界值（24）；该指标仅作筛查参考，不能单独诊断健康状况。");
+    } else suggestions.push("补充身高后可以计算 BMI，并在后续结合个人情况解读。");
+    if (targetGap!=null) {
+      observations.push("当前与目标体重相差 "+(targetGap>0?"+":"")+targetGap.toFixed(1)+" kg（正数表示当前高于目标）。");
+      if(Math.abs(targetGap)<0.5) suggestions.push("当前体重接近你设置的目标，建议观察长期稳定性，并结合腰围、体脂率和主观状态评估。");
+      else if(profile?.goal_type==="fat_loss" && targetGap>0) suggestions.push("如果减脂是你的目标，优先关注可持续的生活习惯与数周趋势，避免激进节食。");
+      else if(profile?.goal_type==="muscle") suggestions.push("增肌目标下不要只看体重；可结合力量训练表现、腰围和体脂率共同评估。");
+      else suggestions.push("定期回顾目标是否仍适合你；不要只依据单次测量调整计划。");
+    } else suggestions.push("设置目标体重后，可以持续追踪与目标的差距。");
+    const waistValues=sorted.filter(r=>r.waist_cm!=null);
+    if(waistValues.length>=2) observations.push("腰围从 "+Number(waistValues[0].waist_cm).toFixed(1)+" cm 变化至 "+Number(waistValues[waistValues.length-1].waist_cm).toFixed(1)+" cm。");
+    const bfValues=sorted.filter(r=>r.body_fat_pct!=null);
+    if(bfValues.length>=2) observations.push("体脂率从 "+Number(bfValues[0].body_fat_pct).toFixed(1)+"% 变化至 "+Number(bfValues[bfValues.length-1].body_fat_pct).toFixed(1)+"%。");
+    if(profile?.activity_level==="low") suggestions.push("档案显示日常活动偏少；若身体条件允许，可从规律步行和减少久坐开始，逐步增加活动量。");
+    else if(profile?.activity_level==="high") suggestions.push("活动量较高时，注意恢复、睡眠和充足营养，避免单纯追求体重数字。");
+    else suggestions.push("尽量在相近时间、相近条件下测量（例如晨起如厕后），并用每周或每月趋势降低日常波动的干扰。");
+    if(sorted.length<5) cautions.push("当前记录数量较少，结论仅为初步描述；建议持续记录至少数周后再评估趋势。");
+    const summary="基于 "+sorted.length+" 条记录（"+sorted[0].measured_on+" 至 "+last.measured_on+"）的规则化统计分析。"+(last7.length>=2?"最近7天有 "+last7.length+" 条记录，均值约 "+mean(last7)!.toFixed(1)+" kg。":"最近7天记录较少，暂不计算周均值。");
+    setLocalAnalysis({summary,observations,suggestions,cautions,data_quality: sorted.length<5?"数据量有限，结论可信度较低；这是统计规则分析，不是 AI 医疗诊断。":"结果根据现有记录自动计算，短期波动可能受水分、饮食、测量时间和运动影响；这不是医疗诊断。"});
   }
 
   async function saveProfile(e: FormEvent<HTMLFormElement>) {
@@ -200,11 +242,10 @@ export default function WeightPage() {
       {error && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">{error}</p>}
       {message && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
 
-      <section className="mb-5 rounded-[26px] border border-violet-100 bg-violet-50 p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold tracking-[0.18em] text-violet-500">WEIS AI INSIGHTS</p><h2 className="mt-1 text-lg font-semibold">AI 体重趋势分析</h2><p className="mt-1 text-xs leading-5 text-slate-500">结合历史记录与个人档案生成趋势解读和建议。</p></div><button type="button" onClick={()=>void runAIAnalysis()} disabled={aiBusy||loading||records.length<2} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{aiBusy?"分析中…":aiAnalysis?"重新分析":"开始 AI 分析"}</button></div>
-        {records.length<2&&<p className="mt-3 rounded-xl bg-white p-3 text-xs text-slate-500">至少录入两个不同日期的体重后，才能分析趋势。</p>}
-        {aiError&&<p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{aiError}</p>}
-        {aiAnalysis&&<div className="mt-4 space-y-3"><div className="rounded-2xl bg-white p-4"><p className="text-xs font-semibold text-violet-600">综合解读</p><p className="mt-2 text-sm leading-7 text-slate-700">{aiAnalysis.summary}</p></div><div className="rounded-2xl bg-white p-4"><h3 className="text-sm font-semibold">趋势观察</h3><ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-slate-600">{aiAnalysis.observations.map((x,i)=><li key={i}>{x}</li>)}</ul></div><div className="rounded-2xl bg-white p-4"><h3 className="text-sm font-semibold">个性化建议</h3><ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-slate-600">{aiAnalysis.suggestions.map((x,i)=><li key={i}>{x}</li>)}</ul></div><div className="rounded-2xl bg-white p-4"><h3 className="text-sm font-semibold">需要留意</h3><ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-slate-600">{aiAnalysis.cautions.map((x,i)=><li key={i}>{x}</li>)}</ul></div><p className="text-xs text-slate-400">{aiAnalysis.data_quality} · 分析时间：{new Date(aiGeneratedAt).toLocaleString()}。仅供一般健康信息参考，不构成医疗诊断。</p></div>}
+      <section className="mb-5 rounded-[26px] border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold tracking-[0.18em] text-violet-500">WEIS LOCAL INSIGHTS</p><h2 className="mt-1 text-lg font-semibold">体重趋势与规则分析</h2><p className="mt-1 text-xs leading-5 text-slate-500">免费本地计算，不调用外部 AI、不发送健康数据给模型服务。</p></div><button type="button" onClick={runLocalAnalysis} disabled={loading||records.length<2} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">生成分析</button></div>
+        {records.length<2&&<p className="mt-3 rounded-xl bg-white/80 p-3 text-xs text-slate-500">至少录入两个不同日期的体重后，才能分析趋势。</p>}
+        {localAnalysis&&<div className="mt-4 space-y-3"><div className="rounded-2xl bg-white/90 p-4"><p className="text-xs font-semibold text-violet-600">综合摘要</p><p className="mt-2 text-sm leading-7 text-slate-700">{localAnalysis.summary}</p></div>{[["趋势观察",localAnalysis.observations],["建议",localAnalysis.suggestions],["需要留意",localAnalysis.cautions]].map(([title,items])=><div key={title as string} className="rounded-2xl bg-white/80 p-4"><h3 className="text-sm font-semibold text-slate-800">{title}</h3><ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">{(items as string[]).map((item,i)=><li key={i}>{item}</li>)}</ul></div>)}<p className="text-xs leading-5 text-slate-400">{localAnalysis.data_quality}</p></div>}
       </section>
 
       <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
