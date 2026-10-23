@@ -46,8 +46,13 @@ const categoryNames: Record<Anniversary["category"], string> = {
   family: "家庭", work: "工作", study: "学习", custom: "自定义"
 };
 const categoryIcons: Record<Anniversary["category"], string> = {
-  birthday: "🎂", relationship: "♡", wedding: "💍", family: "🏡",
-  work: "✦", study: "🎓", custom: "✧"
+  birthday: "🎂",
+  relationship: "💕",
+  wedding: "💍",
+  family: "🏡",
+  work: "💼",
+  study: "📚",
+  custom: "🌷"
 };
 function getTiming(item: Anniversary, now: Date) {
   const [y,m,d] = item.event_date.split("-").map(Number);
