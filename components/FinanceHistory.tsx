@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import TrendLine from "./TrendLine";
 type Point = { date: string; close: number };
 export default function FinanceHistory({ code, kind = "stock" }: { code: string; kind?: "stock" | "fund" }) {
   const [period, setPeriod] = useState<"day" | "week">("day");
@@ -27,7 +28,6 @@ export default function FinanceHistory({ code, kind = "stock" }: { code: string;
   const max = values.length ? Math.max(...values) : 1;
   const range = Math.max(max - min, max * 0.002, 0.001);
   const scaled = points.map((p, i) => `${16 + (i / Math.max(1, points.length - 1)) * 688},${186 - ((p.close - min) / range) * 160}`).join(" ");
-  const rising = points.length > 1 && points[points.length - 1].close >= points[0].close;
   return <section className="mt-6 rounded-[28px] border border-white/90 bg-white/75 p-5 shadow-sm sm:p-7">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-medium">{kind === "fund" ? "历史单位净值" : "历史收盘价"} · {code}</h2><p className="mt-1 text-xs text-slate-400">{kind === "fund" ? "已公布历史净值，不是盘中实时估值" : "前复权数据，仅用于趋势参考；不包含分时实时价格"}</p></div>
       {kind === "stock" && <div className="flex gap-2">{(["day", "week"] as const).map(p => <button type="button" key={p} onClick={() => setPeriod(p)} className={`rounded-xl px-4 py-2 text-sm ${period === p ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{p === "day" ? "日线" : "周线"}</button>)}</div>}</div>
@@ -35,7 +35,7 @@ export default function FinanceHistory({ code, kind = "stock" }: { code: string;
       <div className="flex justify-between text-xs text-slate-400"><span>{max.toFixed(3)}</span><span>最新收盘 {points[points.length - 1]?.close.toFixed(3)}</span></div>
       <svg viewBox="0 0 720 205" className="mt-2 w-full" role="img" aria-label={`${code} 历史收盘价折线图`}>
         {[26, 66, 106, 146, 186].map(y => <line key={y} x1="16" x2="704" y1={y} y2={y} stroke="#94a3b8" strokeOpacity="0.20" strokeDasharray="4 6" />)}
-        <polyline points={scaled} fill="none" stroke={rising ? "#e11d48" : "#059669"} strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" />
+        <TrendLine points={scaled} strokeWidth={2.6} strokeLinejoin="round" strokeLinecap="round" />
       </svg>
       <div className="flex justify-between text-xs text-slate-400"><span>{points[0]?.date}</span><span>最低 {min.toFixed(3)}</span><span>{points[points.length - 1]?.date}</span></div>
     </div>}
