@@ -34,6 +34,15 @@ const modules = [
       "from-rose-200/70 via-orange-100/60 to-amber-200/70",
     symbolColor: "text-rose-500",
   },
+  {
+    title: "Weight",
+    subtitle: "Understand your progress.",
+    description: "体重记录 · 趋势分析 · 目标管理",
+    href: "/weight",
+    symbol: "⌁",
+    colors: "from-emerald-200/70 via-teal-100/60 to-cyan-200/70",
+    symbolColor: "text-emerald-600",
+  },
 ];
 
 
@@ -76,7 +85,7 @@ export default function Home() {
         </header>
 
         {/* 两个模块 */}
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {modules.map((module) => (
             <Link
               key={module.title}
