@@ -54,6 +54,18 @@ function getTiming(item: Anniversary, now: Date) {
   const original = new Date(y,m-1,d,12);
   const todayDate = new Date(now.getFullYear(),now.getMonth(),now.getDate(),12);
   const diffDays = (a: Date,b: Date) => Math.round((a.getTime()-b.getTime())/86400000);
+  if (item.repeats_yearly && item.calendar_type === "lunar" && item.lunar_month && item.lunar_day) {
+    const nextDate = new Date(todayDate);
+    let found = false;
+    for (let i=0;i<=370;i++) {
+      const parts = getLunarParts(nextDate);
+      if (parts.month===item.lunar_month && parts.day===item.lunar_day) { found=true; break; }
+      nextDate.setDate(nextDate.getDate()+1);
+    }
+    const days = diffDays(nextDate,todayDate);
+    const elapsedYears = Math.max(0, todayDate.getFullYear()-(item.lunar_year||y)-((todayDate.getMonth()<m-1 || (todayDate.getMonth()===m-1&&todayDate.getDate()<d))?1:0));
+    return {days:found?days:365,nextDate,elapsedYears,passed:false};
+  }
   if (!item.repeats_yearly) {
     const days = diffDays(original,todayDate);
     return { days, nextDate: original, elapsedYears: null as number | null, passed: days < 0 };
@@ -90,12 +102,16 @@ export default function AnniversariesPage() {
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) { setError("请先登录 WeiS 账号，再查看个人纪念日。"); setLoading(false); return; }
-    setUserId(user.id);
-    const {data,error:queryError}=await supabase.from("anniversaries").select("id,user_id,title,event_date,calendar_type,lunar_month,lunar_day,lunar_year,category,repeats_yearly,note,created_at").eq("user_id",user.id).order("event_date",{ascending:true});
-    if(queryError) setError("读取纪念日失败。请确认已执行纪念日数据库迁移。");
-    else setItems((data||[]) as Anniversary[]);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) { setError(authError?.message || "请先登录 WeiS 账号，再查看个人纪念日。"); setLoading(false); return; }
+      setUserId(user.id);
+      const {data,error:queryError}=await supabase.from("anniversaries").select("id,user_id,title,event_date,calendar_type,lunar_month,lunar_day,lunar_year,category,repeats_yearly,note,created_at").eq("user_id",user.id).order("event_date",{ascending:true});
+      if(queryError) setError("读取纪念日失败："+queryError.message+(queryError.code==="PGRST204"||queryError.code==="42703"?"。请先执行纪念日农历字段迁移。":""));
+      else setItems((data||[]) as Anniversary[]);
+    } catch {
+      setError("无法连接 Supabase（Failed to fetch）。请检查 Cloudflare Pages 环境变量 NEXT_PUBLIC_SUPABASE_URL、NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY，以及 Supabase 项目网络状态。");
+    }
     setLoading(false);
   },[]);
   useEffect(()=>{void load();},[load]);
