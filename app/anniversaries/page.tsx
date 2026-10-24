@@ -90,7 +90,8 @@ function countCaption(item: Anniversary & { timing: { days: number; elapsedYears
       return `${elapsedYears} 岁 · 已度过 ${elapsed} 天`;
     }
     if (item.category === "work") {
-      return `已工作 ${getWorkElapsedYears(item, now)} 年`;
+      const duration = getWorkDuration(item, now);
+      return duration.years > 0 ? `已工作 ${duration.years} 年` : `已工作 ${duration.days} 天`;
     }
     const anniversary = item.repeats_yearly && elapsedYears > 0 ? `${elapsedYears} 周年 · ` : "";
     return anniversary + `正向计时 ${elapsed} 天`;
@@ -146,12 +147,15 @@ function getTiming(item: Anniversary, now: Date) {
   const isToday = todayDate.getMonth()===m-1&&todayDate.getDate()===d;
   return { days: isToday ? 0 : days, nextDate, elapsedYears: Math.max(0,elapsedYears), passed: false };
 }
-function getWorkElapsedYears(item: Anniversary, now: Date) {
+function getWorkDuration(item: Anniversary, now: Date) {
   const [year, month, day] = item.event_date.split("-").map(Number);
   const startDate = new Date(year, month - 1, day, 12);
   const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-  const elapsedTotalDays = Math.max(0, Math.round((todayDate.getTime() - startDate.getTime()) / 86400000));
-  return (elapsedTotalDays / 365.2425).toFixed(2);
+  const elapsedDays = Math.max(0, Math.round((todayDate.getTime() - startDate.getTime()) / 86400000));
+  let elapsedYears = Math.max(0, todayDate.getFullYear() - year);
+  const thisYearAnniversary = new Date(todayDate.getFullYear(), month - 1, day, 12);
+  if (todayDate < thisYearAnniversary) elapsedYears -= 1;
+  return { days: elapsedDays, years: Math.max(0, elapsedYears) };
 }
 function getForwardDays(item: Anniversary, now: Date) {
   const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
@@ -295,12 +299,12 @@ export default function AnniversariesPage() {
                   <div className="shrink-0 text-right">
                     <p className="text-2xl font-semibold tabular-nums text-rose-500">
                       {item.count_mode === "forward"
-                        ? item.category === "work" ? `${getWorkElapsedYears(item, now)} 年` : (getForwardDays(item, now) === 0 ? "今天" : getForwardDays(item, now))
+                        ? item.category === "work" ? getWorkDuration(item, now).days : (getForwardDays(item, now) === 0 ? "今天" : getForwardDays(item, now))
                         : item.timing.days === 0 ? "今天" : item.timing.days > 0 ? item.timing.days : Math.abs(item.timing.days)}
                     </p>
                     <p className="text-xs text-slate-500">
                       {item.count_mode === "forward"
-                        ? item.category === "work" ? "工作时长" : (getForwardDays(item, now) === 0 ? "从今天开始" : `已过去 ${getForwardDays(item, now)} 天`)
+                        ? item.category === "work" ? "天" : (getForwardDays(item, now) === 0 ? "从今天开始" : `已过去 ${getForwardDays(item, now)} 天`)
                         : item.timing.days === 0 ? "就是今天" : item.timing.days > 0 ? "天后" : "天前"}
                     </p>
                   </div>
