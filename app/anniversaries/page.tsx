@@ -87,7 +87,7 @@ function countCaption(item: Anniversary & { timing: { days: number; elapsedYears
   if (item.count_mode === "forward") {
     const elapsed = getForwardDays(item, now);
     if (isBirthday && item.repeats_yearly && elapsedYears > 0) {
-      return `目前 ${elapsedYears} 岁 · 已度过 ${elapsed} 天`;
+      return `${elapsedYears} 岁 · 已度过 ${elapsed} 天`;
     }
     const anniversary = item.repeats_yearly && elapsedYears > 0 ? `目前已 ${elapsedYears} 周年 · ` : "";
     return anniversary + `正向计时 ${elapsed} 天`;
@@ -100,7 +100,7 @@ function countCaption(item: Anniversary & { timing: { days: number; elapsedYears
         : elapsedYears > 0 ? `今天是第 ${elapsedYears} 周年，值得纪念！` : "今天值得纪念";
     }
     const currentMilestone = isBirthday
-      ? `目前 ${elapsedYears} 岁`
+      ? `${elapsedYears} 岁`
       : elapsedYears > 0 ? `目前已 ${elapsedYears} 周年` : "纪念日";
     const nextMilestone = isBirthday
       ? `距离下次生日还有 ${item.timing.days} 天`
