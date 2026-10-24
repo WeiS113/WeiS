@@ -81,12 +81,33 @@ function nameFor(item: Pick<Anniversary, "category" | "custom_category">) {
   return item.category === "custom" && item.custom_category?.trim() ? item.custom_category : categoryNames[item.category];
 }
 function countCaption(item: Anniversary & { timing: { days: number; elapsedYears: number | null } }, now: Date) {
+  const elapsedYears = item.timing.elapsedYears ?? 0;
+  const isBirthday = item.category === "birthday";
+
   if (item.count_mode === "forward") {
     const elapsed = getForwardDays(item, now);
-    const anniversary = item.repeats_yearly && item.timing.elapsedYears !== null && item.timing.elapsedYears > 0 ? `已度过第 ${item.timing.elapsedYears} 周年 · ` : "";
+    if (isBirthday && item.repeats_yearly && elapsedYears > 0) {
+      return `目前 ${elapsedYears} 岁 · 已度过 ${elapsed} 天`;
+    }
+    const anniversary = item.repeats_yearly && elapsedYears > 0 ? `目前已 ${elapsedYears} 周年 · ` : "";
     return anniversary + `正向计时 ${elapsed} 天`;
   }
-  if (item.repeats_yearly) return item.timing.days === 0 ? "今天值得纪念" : `距离下次还有 ${item.timing.days} 天`;
+
+  if (item.repeats_yearly) {
+    if (item.timing.days === 0) {
+      return isBirthday
+        ? `今天满 ${elapsedYears} 岁，生日快乐！`
+        : elapsedYears > 0 ? `今天是第 ${elapsedYears} 周年，值得纪念！` : "今天值得纪念";
+    }
+    const currentMilestone = isBirthday
+      ? `目前 ${elapsedYears} 岁`
+      : elapsedYears > 0 ? `目前已 ${elapsedYears} 周年` : "纪念日";
+    const nextMilestone = isBirthday
+      ? `距离下次生日还有 ${item.timing.days} 天`
+      : `距离下次还有 ${item.timing.days} 天`;
+    return `${currentMilestone} · ${nextMilestone}`;
+  }
+
   return item.timing.days < 0 ? `已过去 ${Math.abs(item.timing.days)} 天` : `倒计时 ${item.timing.days} 天`;
 }
 
