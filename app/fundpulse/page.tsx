@@ -16,6 +16,7 @@ type Fund = {
   model?: string;
   sourceCount?: number;
   disagreement?: number;
+  coverage?: number;
   analysis?: { classificationLabel:string; benchmark:string|null; strategy:string|null; disclosedHoldings:{code:string;name:string;weight:number;assetClass:"stock"|"bond"|"fund"|"other";market?:"domestic"|"overseas"|"unknown"}[]; disclosedWeight:number; disclosedBondWeight?:number; disclosedFundWeight?:number; underlyingEtf?:{code:string;name:string}|null; holdingsAsOf:string|null; evidence:string[]; notes:string[] };
 };
 
@@ -192,6 +193,7 @@ export default function FundPulsePage() {
     model: funds[code]?.model || "unknown",
     sourceCount: funds[code]?.sourceCount ?? 0,
     disagreement: funds[code]?.disagreement ?? 0,
+    coverage: funds[code]?.coverage,
     analysis: funds[code]?.analysis,
   })), [codes, funds, names, holdings]);
 
