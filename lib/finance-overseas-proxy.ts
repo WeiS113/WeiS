@@ -84,21 +84,22 @@ function selectBenchmark(benchmark: string, strategy: string, description: strin
         const weight = weightMatch ? Number(weightMatch[1]) : null;
         const cashOnly = /现金|活期存款|银行存款|货币市场|cash|deposit/i.test(piece);
         if (matches.length === 1 && weight !== null && weight > 0 && weight <= 100) {
-          return { component: { ticker: matches[0].ticker, label: matches[0].label, weight: weight / 100 }, cashOnly: false, hasWeight: true };
+          return { component: { ticker: matches[0].ticker, label: matches[0].label, weight: weight / 100 }, cashOnly: false, hasWeight: true, hasMarket: true };
         }
-        if (cashOnly && weight !== null && weight > 0 && weight <= 100) return { component: null, cashOnly: true, hasWeight: true };
-        return { component: null, cashOnly: false, hasWeight: false };
+        if (cashOnly && weight !== null && weight > 0 && weight <= 100) return { component: null, cashOnly: true, hasWeight: true, hasMarket: false };
+        return { component: null, cashOnly: false, hasWeight: false, hasMarket: matches.length > 0 };
       });
       const total = pieces.reduce((sum, piece) => sum + Number(piece.match(/(\d{1,3}(?:\.\d+)?)\s*%/)?.[1] ?? 0), 0);
       const components = parsed.flatMap(item => item.component ? [item.component] : []);
-      if (components.length > 1 || (components.length === 1 && parsed.some(item => item.cashOnly))) {
+      if (parsed.some(item => item.hasMarket || item.cashOnly || item.hasWeight)) {
         // Support genuine weighted multi-market benchmarks and an explicitly weighted cash sleeve;
         // do not guess weights when multiple markets appear in prose, and never ignore an unmodelled bond sleeve.
-        if (parsed.every(item => item.hasWeight && (item.component !== null || item.cashOnly))
+        if (components.length > 0
+          && parsed.every(item => item.hasWeight && (item.component !== null || item.cashOnly))
           && Math.abs(total - 100) <= 3) {
           return { components, matchedBy };
         }
-        if (components.length > 1) return null;
+        return null;
       }
     }
     const matches = BENCHMARKS.filter(x => x.words.test(text));
