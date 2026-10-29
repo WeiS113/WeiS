@@ -61,6 +61,7 @@ export async function GET(request:NextRequest){
  // Previously this request ran only after classification and holdings-based estimation,
  // so the browser's 15-second timeout could discard the entire response before it arrived.
  const fundGzResultsPromise=Promise.all(codes.map(async code=>({code,value:await queryFundGz(code)})));
+ const profileResultsPromise=Promise.all(codes.map(async code=>({code,profile:await analyzeFundComposition(code)})));
  const responses=await Promise.all(hosts.map(async host=>{
   try{return await query(host,codes);}catch{return new Map<string,Estimate>();}
  }));
