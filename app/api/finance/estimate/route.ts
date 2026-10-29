@@ -92,7 +92,7 @@ export async function GET(request:NextRequest){
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
  // QDII fallback is separate from domestic stock holdings; it uses a benchmark-matched foreign proxy plus FX.
  const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
- const overseasResults=await Promise.all(overseasCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
+ const overseasResults=await Promise.all(overseasCodes.map(async code=>{const profile=profilesByCode.get(code);return {code,reply:await estimateOverseasProxy(code,{benchmark:profile?.benchmark,strategy:profile?.strategy,disclosedHoldings:profile?.disclosedHoldings??[]})};}));
  const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
  const indexCodes=codes.filter(code=>knownType.get(code)==="index"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&Boolean(profilesByCode.get(code)?.underlyingEtf));
  const indexResults=await Promise.all(indexCodes.map(async code=>{const underlying=profilesByCode.get(code)!.underlyingEtf!;return {code,reply:await estimateIndexFeederProxy(code,underlying.code,underlying.name)};}));
