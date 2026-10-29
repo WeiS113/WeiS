@@ -1,0 +1,42 @@
+name: Validate FundPulse collector
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "cloudflare/fundpulse-collector/**"
+      - "app/api/cron/fundpulse-collect/**"
+      - "app/api/finance/estimate/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/validate-fundpulse.yml"
+  push:
+    branches: [feat/fundpulse-cloud-data-foundation]
+    paths:
+      - "cloudflare/fundpulse-collector/**"
+      - "app/api/cron/fundpulse-collect/**"
+      - "app/api/finance/estimate/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/validate-fundpulse.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check collector JavaScript syntax
+        run: node --check cloudflare/fundpulse-collector/worker.js
+      - name: Lint
+        run: npm run lint
+      - name: Build Next.js app
+        run: npm run build
