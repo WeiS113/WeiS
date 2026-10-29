@@ -77,8 +77,8 @@ export async function GET(request:NextRequest){
   }));
   const text=[...fields,nameHint].join(" ");
   if(/货币/.test(text))return "money";
-  if(/QDII|海外/.test(text))return "overseas";
   if(/债券|可转债/.test(text))return "bond";
+  if(/QDII|海外/.test(text))return "overseas";
   if(/联接|指数|ETF/.test(text))return "index";
   if(/股票|混合/.test(text))return "equity";
   return "unknown";
