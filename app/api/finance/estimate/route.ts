@@ -1,9 +1,10 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { estimateBondProxy } from "../../../../lib/finance-bond-proxy";
 import { estimateOverseasProxy } from "../../../../lib/finance-overseas-proxy";
+import { analyzeFundComposition, type FundIntelligence } from "../../../../lib/finance-fund-intelligence";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number };
+type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number; analysis?:FundIntelligence };
 const numeric=(v:unknown)=>v==null||v===""||v==="-"?null:Number.isFinite(Number(v))?Number(v):null;
 function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
@@ -67,27 +68,12 @@ export async function GET(request:NextRequest){
  for(const code of codes)candidates.set(code,responses.map(r=>r.get(code)).filter((e):e is Estimate=>Boolean(e&&e.estimatedNav!==null&&e.change!==null&&e.time)));
  const fundGzResults=await fundGzResultsPromise;
  const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
- const classify=async(code:string,nameHint=""):Promise<string>=>{
-  const urls=["FundMNDetailInformation","FundMNBasicInformation"].map(path=>
-   "https://fundmobapi.eastmoney.com/FundMNewApi/"+path+"?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0");
-  const fields=await Promise.all(urls.map(async url=>{
-   try{const r=await fetch(url,{next:{revalidate:3600},signal:AbortSignal.timeout(4500)});if(!r.ok)return "";
-    const d=(await r.json())?.Datas;return [d?.FTYPE,d?.FUNDTYPE,d?.SHORTNAME,d?.NAME,d?.FUNDTYPE_NAME].filter(Boolean).join(" ");
-   }catch{return "";}
-  }));
-  const text=[...fields,nameHint].join(" ");
-  if(/货币/.test(text))return "money";
-  if(/债券|可转债/.test(text))return "bond";
-  if(/QDII|海外/.test(text))return "overseas";
-  if(/联接|指数|ETF/.test(text))return "index";
-  if(/股票|混合/.test(text))return "equity";
-  return "unknown";
- };
- // Classification is only needed for fallback estimators. Avoid two extra provider requests
- // for every fund when the primary valuation sources already returned valid data.
- const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
- const types=await Promise.all(needsClassification.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
- const knownType=new Map(types.map(x=>[x.code,x.type]));
+ // Analyze each fund's metadata and disclosed composition, even when a provider returns a direct estimate.
+ // This keeps the model selection and portfolio review tied to the fund's evidence rather than its name alone.
+ const profileResults=await Promise.all(codes.map(async code=>({code,profile:await analyzeFundComposition(code)})));
+ const profilesByCode=new Map(profileResults.map(x=>[x.code,x.profile]));
+ const mapClass=(v:string):string=>v==="money"?"money":v==="bond"?"bond":v==="overseas"?"overseas":v==="commodity"?"commodity":v==="fof"?"fof":v==="index"?"index":v==="equity"?"equity":v;
+ const knownType=new Map(profileResults.map(x=>[x.code,mapClass(x.profile.classification)]));
  // Index and ETF-link funds also publish portfolio holdings. When direct estimates are unavailable,
  // use the same explicitly low-confidence, disclosed-holdings proxy rather than returning no estimate.
  // This is not an official NAV and may be stale when the fund has rebalanced.
@@ -136,7 +122,7 @@ export async function GET(request:NextRequest){
   const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别"};
   output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
- const results=codes.map(code=>output.get(code)!);
+ const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
  return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
 }
