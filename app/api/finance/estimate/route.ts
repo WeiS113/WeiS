@@ -119,7 +119,7 @@ export async function GET(request:NextRequest){
   if(proxy?.result){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
-  const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别"};
+  const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别",commodity:"商品/贵金属",fof:"FOF/养老目标"};
   output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
  const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
