@@ -1,7 +1,7 @@
 const MAX_CODES = 50;
 
-export default {
-  async scheduled(controller, env, ctx) {
+const worker = {
+  async scheduled(controller, env) {
     console.log("FundPulse collection triggered", {
       cron: controller.cron,
       scheduledTime: new Date(controller.scheduledTime).toISOString(),
@@ -50,6 +50,8 @@ export default {
     }
   },
 };
+
+export default worker;
 
 async function collect(env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.WEIS_SITE_URL) {
