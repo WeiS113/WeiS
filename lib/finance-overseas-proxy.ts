@@ -20,12 +20,12 @@ async function navHistory(code: string): Promise<NavPoint | null> {
     });
     if (!r.ok) return null;
     const text = await r.text();
-    const m = text.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+    const m = text.match(/Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
     if (!m) return null;
     const rows = JSON.parse(m[1]) as { x?: number; y?: number }[];
     const p = rows.filter(x => Number.isFinite(x.x) && Number.isFinite(x.y) && (x.y ?? 0) > 0).at(-1);
     if (!p || p.x == null || p.y == null) return null;
-    return { nav: p.y, date: dateCN(p.x / 1000) };
+    return { nav: p.y, date: new Date(p.x).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }) };
   } catch { return null; }
 }
 function flattenStrings(value: unknown, depth = 0): string[] {
