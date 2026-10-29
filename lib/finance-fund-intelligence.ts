@@ -43,17 +43,20 @@ export async function analyzeFundComposition(code:string):Promise<FundIntelligen
  const evidence:string[]=[];
  const notes:string[]=[];
  let classification:FundAssetClass="unknown";
- // Prefer structured provider type fields; use strategy and benchmark wording only as secondary evidence.
- const typeText=[d.FTYPE,d.FUNDTYPE,d.FUNDTYPE_NAME,b.FTYPE,b.FUNDTYPE,b.FUNDTYPE_NAME].filter(Boolean).join(" ");
- const text=typeText+" "+full;
- if(/货币/.test(text)){classification="money";evidence.push("基金资料标记为货币型");}
- else if(/FOF|基金中基金|养老目标/.test(text)){classification="fof";evidence.push("基金资料标记为FOF/养老目标");}
- else if(/黄金|贵金属|原油|商品基金|商品指数/.test(text)){classification="commodity";evidence.push("基金资料包含商品或贵金属策略");}
- else if(/QDII|海外|境外|纳斯达克|标普.?500|恒生|日经|印度|美国市场|全球市场/i.test(text)){classification="overseas";evidence.push("基金资料包含境外投资或海外基准线索");}
- else if(/债券|可转债|信用债|利率债|中短债|纯债/.test(typeText+" "+getText(d,["INVESTMENTTYPE","INVESTMENT_SCOPE","STRATEGY","FUNDTYPE_NAME"]))) {classification="bond";evidence.push("基金资料标记为债券策略");}
- else if(/指数|ETF|联接/.test(text)){classification="index";evidence.push("基金资料包含指数/ETF/联接线索");}
- else if(/股票|混合/.test(text)){classification="equity";evidence.push("基金资料标记为股票/混合型");}
+ // Structured fund type wins over words found in benchmark/holdings text.
+ const structured=typeText+" "+[d.INVESTMENTTYPE,d.FUNDTYPE_NAME,b.INVESTMENTTYPE,b.FUNDTYPE_NAME].filter(Boolean).join(" ");
+ if(/货币/.test(structured)){classification="money";evidence.push("基金资料标记为货币型");}
+ else if(/FOF|基金中基金|养老目标/.test(structured)){classification="fof";evidence.push("基金资料标记为FOF/养老目标");}
+ else if(/QDII|海外|境外/.test(structured)){classification="overseas";evidence.push("基金资料标记为QDII/境外投资");}
+ else if(/债券|可转债|信用债|利率债|中短债|纯债/.test(structured)){classification="bond";evidence.push("基金资料标记为债券策略");}
+ else if(/黄金|贵金属|原油|商品基金|商品指数/.test(structured)){classification="commodity";evidence.push("基金资料标记为商品或贵金属策略");}
+ else if(/指数|ETF|联接/.test(structured)){classification="index";evidence.push("基金资料标记为指数/ETF/联接");}
+ else if(/股票|混合/.test(structured)){classification="equity";evidence.push("基金资料标记为股票/混合型");}
+ else if(/QDII|海外|境外|纳斯达克|标普.?500|恒生|日经|印度|美国市场|全球市场/i.test(full)){classification="overseas";evidence.push("基金资料包含境外投资或海外基准线索");}
+ else if(/黄金|贵金属|原油|商品基金|商品指数/.test(full)){classification="commodity";evidence.push("基金资料包含商品或贵金属策略");}
  else if(/债券|可转债|信用债|利率债|中短债|纯债/.test(full)){classification="bond";evidence.push("基金资料正文包含债券策略线索");}
+ else if(/指数|ETF|联接/.test(full)){classification="index";evidence.push("基金资料包含指数/ETF/联接线索");}
+ else if(/股票|混合/.test(full)){classification="equity";evidence.push("基金资料包含股票/混合线索");}
  const benchmark=getText(d,["BENCHMARK","PERFORMANCE_COMPARISON_BENCHMARK","COMPAREBENCHMARK","TRACKING_INDEX","INDEXNAME","STANDARD"]);
  const strategy=getText(d,["INVESTMENT_STRATEGY","STRATEGY","INVESTMENT_SCOPE","INVESTMENTTYPE","FUNDTYPE_NAME"]);
  const candidates=[
