@@ -155,7 +155,7 @@ function inferProfile(text: string, context: Context): Profile | null {
   ];
   const matched = classes.filter(item => item.pattern.test(benchmark || strategy));
   const genericAggregate = /中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark);
-  if (genericAggregate && matched.length > 0) return null;
+  if (genericAggregate) return null;
   const hasMultipleBondClasses = matched.length > 1;
   if (hasMultipleBondClasses) {
     const pieces = (benchmark || strategy).split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
