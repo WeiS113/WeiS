@@ -70,7 +70,7 @@ export async function GET(request:NextRequest){
  const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
  // Analyze each fund's metadata and disclosed composition, even when a provider returns a direct estimate.
  // This keeps the model selection and portfolio review tied to the fund's evidence rather than its name alone.
- const profileResults=await Promise.all(codes.map(async code=>({code,profile:await analyzeFundComposition(code)})));
+ const profileResults=await profileResultsPromise;
  const profilesByCode=new Map(profileResults.map(x=>[x.code,x.profile]));
  const mapClass=(v:string):string=>v==="money"?"money":v==="bond"?"bond":v==="overseas"?"overseas":v==="commodity"?"commodity":v==="fof"?"fof":v==="index"?"index":v==="equity"?"equity":v==="mixed"?"mixed":v;
  const knownType=new Map(profileResults.map(x=>[x.code,mapClass(x.profile.classification)]));
