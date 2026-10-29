@@ -66,7 +66,7 @@ export async function estimateFofProxy(
   holdings: FofHolding[],
 ): Promise<{ value: FofProxyEstimate | null; reason: string }> {
   const valid = holdings.filter(h => /^\d{6}$/.test(h.code) && h.weight > 0 && h.weight <= 100);
-  const unique = [...new Map(valid.map(h => [h.code, h])).values()];
+  const unique = [...new Map(valid.map(h => [h.code, h] as const)).values()];
   const disclosedWeight = unique.reduce((sum, h) => sum + h.weight, 0);
   if (unique.length < 2 || disclosedWeight > 100 || disclosedWeight < 85) {
     return { value: null, reason: "FOF底层基金披露权重有效合计为" + disclosedWeight.toFixed(1) + "%；至少需要85%且不超过100%的有效权重，当前不足以估算" };
