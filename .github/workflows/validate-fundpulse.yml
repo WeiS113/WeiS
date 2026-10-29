@@ -39,4 +39,8 @@ jobs:
       - name: Lint collector
         run: npx eslint cloudflare/fundpulse-collector/worker.js
       - name: Build Next.js app
+        env:
+          # Build-only placeholders; no requests or production credentials are used.
+          NEXT_PUBLIC_SUPABASE_URL: https://build-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: build-only-placeholder-key
         run: npm run build
