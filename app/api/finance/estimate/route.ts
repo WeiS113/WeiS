@@ -1,6 +1,7 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { estimateBondProxy } from "../../../../lib/finance-bond-proxy";
 import { estimateOverseasProxy } from "../../../../lib/finance-overseas-proxy";
+import { estimateIndexFeederProxy } from "../../../../lib/finance-index-proxy";
 import { analyzeFundComposition, type FundIntelligence } from "../../../../lib/finance-fund-intelligence";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
@@ -78,7 +79,7 @@ export async function GET(request:NextRequest){
  // Index and ETF-link funds also publish portfolio holdings. When direct estimates are unavailable,
  // use the same explicitly low-confidence, disclosed-holdings proxy rather than returning no estimate.
  // This is not an official NAV and may be stale when the fund has rebalanced.
- const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&["equity","index"].includes(knownType.get(code)??"")).slice(0,12);
+ const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&["equity","index"].includes(knownType.get(code)??"")&&!(knownType.get(code)==="index"&&profilesByCode.get(code)?.underlyingEtf)).slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
   let reason="没有有效股票持仓估算";
   const result=await estimateFromHoldings(code,msg=>{reason=msg;});
@@ -92,6 +93,9 @@ export async function GET(request:NextRequest){
  const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const overseasResults=await Promise.all(overseasCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
  const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
+ const indexCodes=codes.filter(code=>knownType.get(code)==="index"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&Boolean(profilesByCode.get(code)?.underlyingEtf));
+ const indexResults=await Promise.all(indexCodes.map(async code=>{const underlying=profilesByCode.get(code)!.underlyingEtf!;return {code,reply:await estimateIndexFeederProxy(code,underlying.code,underlying.name)};}));
+ const indexByCode=new Map(indexResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
@@ -108,6 +112,8 @@ export async function GET(request:NextRequest){
   if(bond?.value){output.set(code,bond.value);continue;}
   const overseas=overseasByCode.get(code);
   if(overseas?.value){output.set(code,overseas.value);continue;}
+  const indexProxy=indexByCode.get(code);
+  if(indexProxy?.value){output.set(code,indexProxy.value);continue;}
   const proxy=proxyByCode.get(code);
   // For equity funds, prefer a live holdings-weighted estimate when direct
   // providers are unavailable; this is the explicit fallback model, with
@@ -121,7 +127,7 @@ export async function GET(request:NextRequest){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
   const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票型",mixed:"混合资产",unknown:"待识别",commodity:"商品/贵金属",fof:"FOF/养老目标"};
-  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="commodity"?"已识别为商品策略，但未取得经核验的商品基准/期货合约及汇率数据，拒绝套用股票模型":type==="fof"?"已识别为FOF；未取得可用的底层基金权重与同日净值，拒绝用股票行情代替底层组合":type==="money"?"货币基金不应使用股票涨跌代理；请以基金公司公布的万份收益/七日年化及净值为准":type==="mixed"?"混合基金的股票、债券、现金等权重未被完整核验，不将部分股票持仓涨跌外推为整只基金收益":type==="index"?"指数/联接基金尚未取得可验证的跟踪指数/底层ETF及对应交易日收益，未用不匹配指数代替":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
+  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="commodity"?"已识别为商品策略，但未取得经核验的商品基准/期货合约及汇率数据，拒绝套用股票模型":type==="fof"?"已识别为FOF；未取得可用的底层基金权重与同日净值，拒绝用股票行情代替底层组合":type==="money"?"货币基金不应使用股票涨跌代理；请以基金公司公布的万份收益/七日年化及净值为准":type==="mixed"?"混合基金的股票、债券、现金等权重未被完整核验，不将部分股票持仓涨跌外推为整只基金收益":type==="index"?(indexProxy?.reason||"指数/联接基金尚未取得可验证的跟踪指数/底层ETF及对应交易日收益，未用不匹配指数代替"):proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
  const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
