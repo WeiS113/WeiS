@@ -16,6 +16,8 @@ on:
     branches: [feat/fundpulse-cloud-data-foundation]
     paths:
       - "cloudflare/fundpulse-collector/**"
+      - "app/fundpulse/**"
+      - "app/page.tsx"
       - "app/api/cron/fundpulse-collect/**"
       - "app/api/finance/estimate/**"
       - "supabase/migrations/**"
