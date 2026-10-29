@@ -10,7 +10,6 @@ const num = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
-const dateCN = (stamp: number) => new Date(stamp * 1000).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
 const todayCN = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
 async function navHistory(code: string): Promise<NavPoint | null> {
   try {
