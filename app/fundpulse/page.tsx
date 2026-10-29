@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 type Fund = {
   code: string;
@@ -28,6 +29,11 @@ export default function FundPulsePage() {
   const [codes, setCodes] = useState<string[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [holdings, setHoldings] = useState<Record<string, Holding>>({});
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("正在读取持仓与成本…");
+  const [editingHolding, setEditingHolding] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState("");
+  const [editCost, setEditCost] = useState("");
   const [funds, setFunds] = useState<Record<string, Fund>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -41,17 +47,101 @@ export default function FundPulsePage() {
   const [reviewDate] = useState(() => new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", year:"numeric", month:"long", day:"numeric" }));
 
   useEffect(() => {
+    let cancelled = false;
+    let localCodes: string[] = [];
+    let localNames: Record<string, string> = {};
+    let localHoldings: Record<string, Holding> = {};
     try {
       const p = JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || "null");
-      const c: string[] = Array.isArray(p?.codes) ? p.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x)) : [];
-      setCodes([...new Set(c)]);
-      setNames(p?.names && typeof p.names === "object" ? p.names : {});
+      localCodes = Array.isArray(p?.codes) ? p.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x)) : [];
+      localNames = p?.names && typeof p.names === "object" && !Array.isArray(p.names) ? p.names : {};
       const h = JSON.parse(localStorage.getItem(HOLDINGS_KEY) || "{}");
-      setHoldings(h && typeof h === "object" ? h : {});
+      if (h && typeof h === "object" && !Array.isArray(h)) localHoldings = h;
       const j = JSON.parse(localStorage.getItem("weis-fundpulse-journal-v1") || "[]");
       setJournal(Array.isArray(j) ? j : []);
     } catch {}
+    const normalizeHoldings = (source: Record<string, Holding>, list = localCodes) => Object.fromEntries(
+      list.map((code) => {
+        const value = source["fund" + code] ?? source[code];
+        return ["fund" + code, value && typeof value === "object" ? {
+          quantity: Math.max(0, Number(value.quantity) || 0),
+          cost: Math.max(0, Number(value.cost) || 0),
+        } : { quantity: 0, cost: 0 }];
+      })
+    ) as Record<string, Holding>;
+    setCodes([...new Set(localCodes)]);
+    setNames(localNames);
+    setHoldings(normalizeHoldings(localHoldings));
+    void (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (!auth.user) {
+          setCloudStatus("未登录：份额与成本保存在本设备");
+          setCloudReady(true);
+          return;
+        }
+        const { data: remote, error } = await supabase.from("finance_portfolios")
+          .select("codes,names,holdings,updated_at").eq("user_id", auth.user.id).maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          setCloudStatus("云端持仓读取失败，暂用本设备数据：" + error.message);
+          setCloudReady(true);
+          return;
+        }
+        if (remote) {
+          const remoteCodes = Array.isArray(remote.codes) ? remote.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x)) : [];
+          const remoteNames = remote.names && typeof remote.names === "object" && !Array.isArray(remote.names) ? remote.names as Record<string, string> : {};
+          const rawHoldings = remote.holdings && typeof remote.holdings === "object" && !Array.isArray(remote.holdings) ? remote.holdings as Record<string, Holding> : {};
+          const normalized = normalizeHoldings(rawHoldings, remoteCodes);
+          setCodes([...new Set(remoteCodes)]);
+          setNames(remoteNames);
+          setHoldings(normalized);
+          try {
+            localStorage.setItem(PORTFOLIO_KEY, JSON.stringify({ codes: remoteCodes, names: remoteNames }));
+            localStorage.setItem(HOLDINGS_KEY, JSON.stringify(normalized));
+          } catch {}
+          setCloudStatus("已载入账户云端的基金列表、持有份额和单位成本");
+        } else {
+          const { error: writeError } = await supabase.from("finance_portfolios").upsert({
+            user_id: auth.user.id, codes: localCodes, names: localNames,
+            holdings: normalizeHoldings(localHoldings), updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id" });
+          if (cancelled) return;
+          setCloudStatus(writeError ? "云端初始化失败，暂用本设备数据：" + writeError.message : "已将本设备现有持仓初始化到云端");
+        }
+        setCloudReady(true);
+      } catch {
+        if (!cancelled) { setCloudStatus("暂时无法连接云端，使用本设备持仓"); setCloudReady(true); }
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PORTFOLIO_KEY, JSON.stringify({ codes, names }));
+      localStorage.setItem(HOLDINGS_KEY, JSON.stringify(holdings));
+    } catch {}
+  }, [codes, names, holdings]);
+
+  useEffect(() => {
+    if (!cloudReady) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        if (cancelled || !auth.user) return;
+        const { error } = await supabase.from("finance_portfolios").upsert({
+          user_id: auth.user.id, codes, names, holdings, updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+        if (!cancelled) setCloudStatus(error ? "云端同步失败：" + error.message : "份额、单位成本与基金列表已同步");
+      } catch {
+        if (!cancelled) setCloudStatus("云端同步暂不可用；本设备数据已保存");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [cloudReady, codes, names, holdings]);
 
   const refresh = async (nextCodes = codes) => {
     if (!nextCodes.length) { setFunds({}); return; }
@@ -90,7 +180,7 @@ export default function FundPulsePage() {
     name: funds[code]?.name || names[code] || code,
     nav: funds[code]?.estimatedNav ?? null,
     change: funds[code]?.change ?? null,
-    holding: holdings[code] || { quantity: 0, cost: 0 },
+    holding: holdings["fund" + code] || holdings[code] || { quantity: 0, cost: 0 },
     source: funds[code]?.source || "等待数据",
     confidence: funds[code]?.confidence || "unknown",
   })), [codes, funds, names, holdings]);
@@ -105,6 +195,26 @@ export default function FundPulsePage() {
     { title: "组合日内变化", value: invested > 0 && known.length ? money(dailyPnl) : "暂不可计算", desc: "按已录入的份额和估值计算；未录入份额的基金不会计入金额。" },
     { title: "估值可信度", value: rows.some((f) => f.confidence === "low") ? "存在低置信度数据" : available ? "请核对各数据源" : "等待有效数据", desc: "盘中估值不是基金公司公布的最终净值。" },
   ];
+
+  const beginEditHolding = (code: string) => {
+    const holding = holdings["fund" + code] || holdings[code] || { quantity: 0, cost: 0 };
+    setEditingHolding(code);
+    setEditQuantity(String(holding.quantity || 0));
+    setEditCost(String(holding.cost || 0));
+  };
+
+  const saveHolding = () => {
+    if (!editingHolding) return;
+    const quantity = Number(editQuantity);
+    const cost = Number(editCost);
+    if (!Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(cost) || cost < 0) {
+      setNotice("份额和单位成本必须填写不小于 0 的有效数字。");
+      return;
+    }
+    setHoldings((old) => ({ ...old, ["fund" + editingHolding]: { quantity, cost } }));
+    setNotice("已更新持有份额与单位成本，正在同步云端。");
+    setEditingHolding(null);
+  };
 
   const addFund = (fund: {code:string;name:string;kind:"fund"|"stock"}) => {
     if (fund.kind !== "fund") { setNotice("当前 FundPulse 组合页先接入基金估值；股票可继续在 Finance 页面查看。"); return; }
@@ -151,6 +261,7 @@ export default function FundPulsePage() {
             </button>)}
           </nav>
           <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 text-xs font-semibold">持仓同步</div><p className="mb-3 text-xs leading-5 text-slate-500">{cloudStatus}</p>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className="h-2 w-2 rounded-full bg-amber-400" />数据连接状态</div>
             <p className="text-xs leading-5 text-slate-500">使用现有估值与搜索接口。AI 生成式分析服务尚未连接，当前不会伪装成已生成的 AI 结论。</p>
             <Link href="/finance" className="mt-3 inline-flex text-xs font-semibold text-slate-900 underline underline-offset-4">打开原 Finance 页面 ↗</Link>
@@ -205,7 +316,7 @@ export default function FundPulsePage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">快速入口</h3><p className="mt-1 text-xs text-slate-400">把研究、记录和复盘串成完整投资流程</p></div></div><div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{[{t:"基金研究",d:"搜索基金并加入观察组合",i:"⌕",id:"research" as Tab},{t:"持仓分析",d:"查看份额、成本与估值",i:"▤",id:"holdings" as Tab},{t:"AI 每日复盘",d:"整理数据状态与风险检查",i:"✧",id:"review" as Tab},{t:"投资日志",d:"记录交易理由和策略复盘",i:"✎",id:"journal" as Tab}].map((x) => <button key={x.id} onClick={() => setTab(x.id)} className="rounded-2xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"><span className="text-xl">{x.i}</span><p className="mt-3 text-sm font-bold">{x.t}</p><p className="mt-1 text-xs leading-5 text-slate-400">{x.d}</p></button>)}</div></div>
           </>}
 
-          {tab === "holdings" && <div className="space-y-5"><PageHeading title="持仓分析" subtitle="从现有 Finance 观察列表读取基金代码与本地录入的份额、成本。" /><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><Stat label="观察基金" value={String(codes.length)} /><Stat label="已取得有效估值" value={String(available)} /><Stat label="持仓成本估算" value={invested ? money(invested) : "尚未录入份额与成本"} /></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><h3 className="font-bold">基金持仓清单</h3><p className="mt-1 text-xs text-slate-400">估值仅作参考，最终净值以基金公司公布为准。</p></div><button onClick={() => void refresh()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">刷新估值</button></div>{rows.length ? <div className="divide-y divide-slate-100">{rows.map((f) => <div key={f.code} className={"p-4 sm:px-5 " + (selected === f.code ? "bg-indigo-50/50" : "")}><button onClick={() => setSelected(selected === f.code ? null : f.code)} className="flex w-full flex-wrap items-center gap-3 text-left"><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{f.name}</p><p className="mt-1 text-xs text-slate-400">{f.code} · {f.source}</p></div><div className="text-right"><p className="text-sm font-semibold">{f.nav !== null ? f.nav.toFixed(4) : "—"}</p><p className={"mt-1 text-xs font-bold " + tone(f.change)}>{pct(f.change)}</p></div><span className="ml-1 text-slate-400">{selected === f.code ? "−" : "+"}</span></button>{selected === f.code && <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl bg-white p-4 sm:grid-cols-3"><Info label="持有份额" value={f.holding.quantity ? f.holding.quantity.toLocaleString("zh-CN") : "未录入"} /><Info label="单位成本" value={f.holding.cost ? money(f.holding.cost) : "未录入"} /><Info label="估算市值" value={f.nav !== null && f.holding.quantity ? money(f.nav * f.holding.quantity) : "暂不可计算"} /><p className="text-xs leading-5 text-slate-500 sm:col-span-3">{funds[f.code]?.diagnostic || "如需维护份额和成本，请进入原 Finance 页面操作。"} <Link href="/finance" className="font-semibold underline underline-offset-4">前往编辑 →</Link></p></div>}</div>)}</div> : <Empty title="还没有基金观察数据" body="前往基金研究搜索并添加基金，或先在原 Finance 页面维护你的列表。" action="去基金研究" onClick={() => setTab("research")} />}</div></div>}
+          {tab === "holdings" && <div className="space-y-5"><PageHeading title="持仓分析" subtitle="从现有 Finance 观察列表读取基金代码与本地录入的份额、成本。" /><div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><Stat label="观察基金" value={String(codes.length)} /><Stat label="已取得有效估值" value={String(available)} /><Stat label="持仓成本估算" value={invested ? money(invested) : "尚未录入份额与成本"} /></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><h3 className="font-bold">基金持仓清单</h3><p className="mt-1 text-xs text-slate-400">估值仅作参考，最终净值以基金公司公布为准。</p></div><button onClick={() => void refresh()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">刷新估值</button></div>{rows.length ? <div className="divide-y divide-slate-100">{rows.map((f) => <div key={f.code} className={"p-4 sm:px-5 " + (selected === f.code ? "bg-indigo-50/50" : "")}><button onClick={() => setSelected(selected === f.code ? null : f.code)} className="flex w-full flex-wrap items-center gap-3 text-left"><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{f.name}</p><p className="mt-1 text-xs text-slate-400">{f.code} · {f.source}</p></div><div className="text-right"><p className="text-sm font-semibold">{f.nav !== null ? f.nav.toFixed(4) : "—"}</p><p className={"mt-1 text-xs font-bold " + tone(f.change)}>{pct(f.change)}</p></div><span className="ml-1 text-slate-400">{selected === f.code ? "−" : "+"}</span></button>{selected === f.code && <div className="mt-4 rounded-xl bg-white p-4"><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><Info label="持有份额" value={f.holding.quantity ? f.holding.quantity.toLocaleString("zh-CN") : "未录入"} /><Info label="单位成本" value={f.holding.cost ? money(f.holding.cost) : "未录入"} /><Info label="持仓成本" value={f.holding.quantity && f.holding.cost ? money(f.holding.quantity * f.holding.cost) : "未录入"} /><Info label="估算市值" value={f.nav !== null && f.holding.quantity ? money(f.nav * f.holding.quantity) : "暂不可计算"} /><Info label="浮动盈亏估算" value={f.nav !== null && f.holding.quantity && f.holding.cost ? money((f.nav - f.holding.cost) * f.holding.quantity) : "暂不可计算"} /></div>{editingHolding === f.code ? <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-500">持有份额<input type="number" min="0" step="any" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900" /></label><label className="text-xs font-semibold text-slate-500">每份单位成本（元）<input type="number" min="0" step="any" value={editCost} onChange={(e) => setEditCost(e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900" /></label><div className="flex gap-2 sm:col-span-2"><button onClick={() => setEditingHolding(null)} className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm">取消</button><button onClick={saveHolding} className="flex-1 rounded-lg bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white">保存份额与成本</button></div></div> : <button onClick={() => beginEditHolding(f.code)} className="mt-4 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50">编辑份额与单位成本</button>}<p className="mt-3 text-xs leading-5 text-slate-500">{funds[f.code]?.diagnostic || "持仓份额和单位成本与 Finance 页面共用同一账户数据。"} {f.nav !== null && f.holding.quantity && f.holding.cost ? "浮动盈亏仅为估算，未计申赎费、分红及税费。" : ""}</p></div>}</div>)}</div> : <Empty title="还没有基金观察数据" body="前往基金研究搜索并添加基金，或先在原 Finance 页面维护你的列表。" action="去基金研究" onClick={() => setTab("research")} />}</div></div>}
 
           {tab === "research" && <div className="space-y-5"><PageHeading title="基金研究" subtitle="使用现有搜索与估值接口查找基金，支持加入观察组合。" /><div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7"><label className="mb-2 block text-sm font-semibold" htmlFor="fund-search">搜索基金名称或代码</label><div className="flex flex-col gap-2 sm:flex-row"><input id="fund-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="例如：易方达、沪深300、110022" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" /><button onClick={() => { const c = search.trim(); if (/^\d{6}$/.test(c)) addFund({code:c,name:names[c] || c,kind:"fund"}); }} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">按代码添加</button></div>{searchResults.length > 0 && <div className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">{searchResults.map((f) => <div key={f.kind+f.code} className="flex items-center gap-3 px-4 py-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold">{f.kind === "fund" ? "基金" : "股票"}</span><span className="min-w-0 flex-1"><b className="block truncate text-sm">{f.name}</b><small className="text-slate-400">{f.code}</small></span><button onClick={() => addFund(f)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50">{codes.includes(f.code) ? "已加入" : "加入组合"}</button></div>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-400">搜索结果来自现有市场搜索服务。当前组合入口以基金为主，股票研究请使用原 Finance 页面。</p></div><div className="grid grid-cols-1 gap-4 md:grid-cols-2"><ResearchCard icon="◎" title="估值交叉核对" body="观察数据来源、时间和置信度；不同来源差异较大时不要把估值当作确定净值。" /><ResearchCard icon="↗" title="标的与风险" body="进一步研究基金类型、跟踪标的、行业集中度和波动来源。当前页面不会编造未接入的数据。" /><ResearchCard icon="◷" title="数据新鲜度" body="仅把有效的当日估值用于日内变化展示。休市或数据源不可用时会明确显示暂无数据。" /><ResearchCard icon="⌁" title="观察列表" body="将感兴趣的基金加入组合，在投资总览和持仓分析中持续查看估值。" /></div></div>}
 
