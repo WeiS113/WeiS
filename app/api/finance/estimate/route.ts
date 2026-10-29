@@ -91,7 +91,7 @@ export async function GET(request:NextRequest){
  const bondResults=await Promise.all(bondCodes.map(async code=>{const profile=profilesByCode.get(code);return {code,reply:await estimateBondProxy(code,{benchmark:profile?.benchmark,strategy:profile?.strategy,disclosedHoldings:profile?.disclosedHoldings??[]})};}));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
  // QDII fallback is separate from domestic stock holdings; it uses a benchmark-matched foreign proxy plus FX.
- const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
+ const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas");
  const overseasResults=await Promise.all(overseasCodes.map(async code=>{const profile=profilesByCode.get(code);return {code,reply:await estimateOverseasProxy(code,{benchmark:profile?.benchmark,strategy:profile?.strategy,disclosedHoldings:profile?.disclosedHoldings??[]})};}));
  const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
  const indexCodes=codes.filter(code=>knownType.get(code)==="index"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&Boolean(profilesByCode.get(code)?.underlyingEtf));
@@ -107,14 +107,16 @@ export async function GET(request:NextRequest){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
   const bond=bondByCode.get(code);
+  const overseas=overseasByCode.get(code);
   if(type==="bond"&&bond?.value){output.set(code,bond.value);continue;}
+  if(type==="overseas"&&overseas?.value){output.set(code,overseas.value);continue;}
   if(list.length){
    // Prefer two agreeing fresh providers. Never average wildly divergent values.
    const ordered=[...list].sort((a,b)=>String(b.time).localeCompare(String(a.time)));
    const selected=ordered[0];
    const agreement=ordered.filter(x=>Math.abs((x.change??0)-(selected.change??0))<=0.35);
    const disagreement=ordered.length>1?Math.max(...ordered.map(x=>Math.abs((x.change??0)-(selected.change??0)))):0;
-   output.set(code,{...selected,confidence:agreement.length>=2?"medium":"low",model:type==="bond"?"bond-third-party-fallback":"direct",sourceCount:ordered.length,disagreement,diagnostic:type==="bond"?"债券专用基准模型未能建立："+(bond?.reason||"缺少可验证的匹配基准行情")+"；当前采用第三方估值，不能视为已按真实债券组合计算。"+(ordered.length>1&&disagreement>0.35?"多个来源差异较大。":""):ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
+   output.set(code,{...selected,confidence:agreement.length>=2?"medium":"low",model:type==="bond"?"bond-third-party-fallback":"direct",sourceCount:ordered.length,disagreement,diagnostic:type==="bond"?"债券专用基准模型未能建立："+(bond?.reason||"缺少可验证的匹配基准行情")+"；当前采用第三方估值，不能视为已按真实债券组合计算。"+(ordered.length>1&&disagreement>0.35?"多个来源差异较大。":""):type==="overseas"?"海外专用指数/汇率模型未能建立："+(overseas?.reason||"缺少可验证的匹配标的行情")+"；当前采用第三方估值，未按基金实际境外组合完整建模。":ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
    continue;
   }
   if(bond?.value){output.set(code,bond.value);continue;}
