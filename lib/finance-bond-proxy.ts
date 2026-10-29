@@ -124,7 +124,7 @@ function singleComponent(text: string): Component | null {
   if (/城投债/.test(text)) return { weight: 1, ...ETF.city };
   if (/公司债|企业债|中高等级信用债/.test(text)) return { weight: 1, ...ETF.corporate };
   if (/短期融资券|短融指数|短融债/.test(text)) return { weight: 1, ...ETF.shortCredit };
-  if (/政策性金融债|政金债/.test(text)) return { weight: 1, ...ETF.policy };
+  if (/政策性金融债|政金债|国开债|国开行债券/.test(text)) return { weight: 1, ...ETF.policy };
   if (/地方政府债|地方债/.test(text)) return { weight: 1, ...(tenYear ? ETF.local10y : ETF.local5y) };
   if (/国债|利率债|政府债/.test(text)) {
     return { weight: 1, ...(longDuration ? ETF.treasury30y : tenYear ? ETF.treasury10y : fiveYear ? ETF.treasury5y : ETF.treasury5y) };
@@ -154,6 +154,8 @@ function inferProfile(text: string, context: Context): Profile | null {
     { pattern: /国债|利率债|政府债|treasury/, key: "treasury" },
   ];
   const matched = classes.filter(item => item.pattern.test(benchmark || strategy));
+  const genericAggregate = /中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark);
+  if (genericAggregate && matched.length > 0) return null;
   const hasMultipleBondClasses = matched.length > 1;
   if (hasMultipleBondClasses) {
     const pieces = (benchmark || strategy).split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
