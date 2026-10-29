@@ -110,10 +110,12 @@ alter table public.fundpulse_transactions enable row level security;
 alter table public.fundpulse_portfolio_snapshots enable row level security;
 alter table public.fundpulse_daily_reports enable row level security;
 
-revoke all on public.fundpulse_transactions from anon;
-revoke all on public.fundpulse_portfolio_snapshots from anon;
-revoke all on public.fundpulse_daily_reports from anon;
-grant select, insert, update, delete on public.fundpulse_transactions to authenticated;
+revoke all on public.fundpulse_transactions from anon, authenticated;
+revoke all on public.fundpulse_portfolio_snapshots from anon, authenticated;
+revoke all on public.fundpulse_daily_reports from anon, authenticated;
+-- Transaction ledger is append-only from the browser. Corrections are new rows;
+-- this prevents silent edits/deletions from erasing the audit trail.
+grant select, insert on public.fundpulse_transactions to authenticated;
 grant select on public.fundpulse_portfolio_snapshots to authenticated;
 grant select on public.fundpulse_daily_reports to authenticated;
 
@@ -124,11 +126,7 @@ drop policy if exists fundpulse_transactions_insert_own on public.fundpulse_tran
 create policy fundpulse_transactions_insert_own on public.fundpulse_transactions
   for insert to authenticated with check ((select auth.uid()) = user_id);
 drop policy if exists fundpulse_transactions_update_own on public.fundpulse_transactions;
-create policy fundpulse_transactions_update_own on public.fundpulse_transactions
-  for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists fundpulse_transactions_delete_own on public.fundpulse_transactions;
-create policy fundpulse_transactions_delete_own on public.fundpulse_transactions
-  for delete to authenticated using ((select auth.uid()) = user_id);
 
 drop policy if exists fundpulse_snapshots_select_own on public.fundpulse_portfolio_snapshots;
 create policy fundpulse_snapshots_select_own on public.fundpulse_portfolio_snapshots
