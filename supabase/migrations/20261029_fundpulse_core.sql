@@ -110,9 +110,9 @@ alter table public.fundpulse_transactions enable row level security;
 alter table public.fundpulse_portfolio_snapshots enable row level security;
 alter table public.fundpulse_daily_reports enable row level security;
 
-revoke all on public.fundpulse_transactions from anon, authenticated;
-revoke all on public.fundpulse_portfolio_snapshots from anon, authenticated;
-revoke all on public.fundpulse_daily_reports from anon, authenticated;
+revoke all on public.fundpulse_transactions from anon, authenticated, public;
+revoke all on public.fundpulse_portfolio_snapshots from anon, authenticated, public;
+revoke all on public.fundpulse_daily_reports from anon, authenticated, public;
 -- Transaction ledger is append-only from the browser. Corrections are new rows;
 -- this prevents silent edits/deletions from erasing the audit trail.
 grant select, insert on public.fundpulse_transactions to authenticated;
@@ -140,9 +140,9 @@ alter table public.fundpulse_funds enable row level security;
 alter table public.fundpulse_nav_history enable row level security;
 alter table public.fundpulse_estimates enable row level security;
 
-revoke all on public.fundpulse_funds from anon;
-revoke all on public.fundpulse_nav_history from anon;
-revoke all on public.fundpulse_estimates from anon;
+revoke all on public.fundpulse_funds from anon, authenticated, public;
+revoke all on public.fundpulse_nav_history from anon, authenticated, public;
+revoke all on public.fundpulse_estimates from anon, authenticated, public;
 grant select on public.fundpulse_funds to authenticated;
 grant select on public.fundpulse_nav_history to authenticated;
 grant select on public.fundpulse_estimates to authenticated;
