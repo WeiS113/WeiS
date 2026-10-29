@@ -1,0 +1,13 @@
+name = "weis-fundpulse-collector"
+main = "worker.js"
+compatibility_date = "2026-10-16"
+workers_dev = true
+
+[triggers]
+crons = ["*/5 1-7 * * MON-FRI"]
+
+[vars]
+WEIS_SITE_URL = "https://weis13.cn"
+
+[observability]
+enabled = true
