@@ -157,11 +157,15 @@ function inferProfile(text: string, context: Context): Profile | null {
     { pattern: /地方政府债|地方债/, key: "local" },
     { pattern: /国债|利率债|政府债|treasury/, key: "treasury" },
   ];
-  const matched = classes.filter(item => item.pattern.test(benchmark || strategy));
+  // Prefer the benchmark when it names a supported bond class; otherwise let a more
+  // specific strategy description take over instead of letting a generic benchmark mask it.
+  const benchmarkHasBondClass = classes.some(item => item.pattern.test(benchmark));
+  const classificationText = benchmarkHasBondClass ? benchmark : strategy;
+  const matched = classes.filter(item => item.pattern.test(classificationText));
   const genericAggregate = /中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark);
   const hasMultipleBondClasses = matched.length > 1;
   if (hasMultipleBondClasses) {
-    const pieces = (benchmark || strategy).split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
+    const pieces = classificationText.split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
     const components: Component[] = [];
     for (const piece of pieces) {
       const weightMatch = piece.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
