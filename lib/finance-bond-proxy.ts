@@ -7,7 +7,7 @@ const day=()=>new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
 async function navHistory(code:string):Promise<{nav:number;date:string}|null>{
  try{
   const res=await fetch("https://fund.eastmoney.com/pingzhongdata/"+code+".js",{signal:AbortSignal.timeout(5500),next:{revalidate:240},headers:{"User-Agent":"Mozilla/5.0","Referer":"https://fund.eastmoney.com/"}});
-  if(!res.ok)return null;const txt=await res.text();const m=txt.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);if(!m)return null;
+  if(!res.ok)return null;const txt=await res.text();const m=txt.match(/Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);if(!m)return null;
   const rows=JSON.parse(m[1]) as {x:number;y:number}[];const last=rows.filter(x=>Number.isFinite(x.x)&&Number.isFinite(x.y)&&x.y>0).at(-1);
   if(!last)return null;return {nav:last.y,date:new Date(last.x).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"})};
  }catch{return null;}
