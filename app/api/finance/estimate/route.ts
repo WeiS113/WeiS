@@ -5,7 +5,7 @@ import { estimateIndexFeederProxy } from "../../../../lib/finance-index-proxy";
 import { analyzeFundComposition, type FundIntelligence } from "../../../../lib/finance-fund-intelligence";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number; analysis?:FundIntelligence };
+type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number; coverage?:number; analysis?:FundIntelligence };
 const numeric=(v:unknown)=>v==null||v===""||v==="-"?null:Number.isFinite(Number(v))?Number(v):null;
 function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
