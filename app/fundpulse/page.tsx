@@ -196,7 +196,7 @@ export default function FundPulsePage() {
   })), [codes, funds, names, holdings]);
 
   const invested = rows.reduce((sum, f) => sum + Math.max(0, f.holding.quantity * f.holding.cost), 0);
-  const marketValue = rows.reduce((sum, f) => sum + (f.nav !== null ? Math.max(0, f.holding.quantity * f.nav) : 0), 0);
+  const marketValue = rows.reduce((sum, f) => sum + (f.nav !== null ? Math.max(0, f.holding.quantity * f.nav) : 0), 0);\n  const pricedCost = rows.reduce((sum, f) => sum + (f.nav !== null ? Math.max(0, f.holding.quantity * f.holding.cost) : 0), 0);\n  const totalPnl = rows.reduce((sum, f) => sum + (f.nav !== null && f.holding.quantity > 0 && f.holding.cost > 0 ? f.holding.quantity * (f.nav - f.holding.cost) : 0), 0);
   const dailyPnl = rows.reduce((sum, f) => { if (f.nav === null || f.change === null || f.change <= -100 || f.holding.quantity <= 0) return sum; const previousNav = f.nav / (1 + f.change / 100); return sum + f.holding.quantity * (f.nav - previousNav); }, 0);
   const known = rows.filter((f) => f.change !== null);
   const available = rows.filter((f) => f.nav !== null).length;
@@ -306,10 +306,10 @@ export default function FundPulsePage() {
                 <div><span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-slate-200">PORTFOLIO OVERVIEW</span><h2 className="mt-5 max-w-xl text-2xl font-bold leading-tight sm:text-3xl">让每一次投资决策，<br className="hidden sm:block" />都有数据依据。</h2><p className="mt-3 max-w-lg text-sm leading-6 text-slate-300">把持仓、市场估值、风险观察和投资复盘放在同一工作台。仅展示已获取的数据，不用演示数字冒充真实资产。</p></div>
                 <div className="rounded-2xl border border-white/15 bg-white/5 p-4 sm:min-w-[190px]"><p className="text-xs text-slate-400">估值数据覆盖</p><p className="mt-2 text-3xl font-bold">{available}<span className="text-base font-medium text-slate-400"> / {codes.length}</span></p><p className="mt-1 text-xs text-slate-400">只基金取得有效估值</p></div>
               </div>
-              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p className="text-xs text-slate-400">持仓成本估算</p><p className="mt-2 text-2xl font-semibold">{invested ? money(invested) : "—"}</p><p className="mt-1 text-xs text-slate-400">基于已录入份额与成本</p></div>
                 <div className="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p className="text-xs text-slate-400">当前估算市值</p><p className="mt-2 text-2xl font-semibold">{marketValue ? money(marketValue) : "—"}</p><p className="mt-1 text-xs text-slate-400">无份额或无估值时不计入</p></div>
-                <div className="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p className="text-xs text-slate-400">日内估算盈亏</p><p className={"mt-2 text-2xl font-semibold " + (dailyPnl >= 0 ? "text-rose-300" : "text-emerald-300")}>{invested && known.length ? (dailyPnl > 0 ? "+" : "") + money(dailyPnl) : "—"}</p><p className="mt-1 text-xs text-slate-400">仅为估算，不代表实际收益</p></div>
+                <div className="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p className="text-xs text-slate-400">组合浮动盈亏估算</p><p className={"mt-2 text-2xl font-semibold " + (totalPnl >= 0 ? "text-rose-300" : "text-emerald-300")}>{pricedCost > 0 ? (totalPnl > 0 ? "+" : "") + money(totalPnl) : "—"}</p><p className="mt-1 text-xs text-slate-400">仅统计已取得估值且录入成本的基金</p></div>\n                <div className="rounded-2xl border border-white/10 bg-white/[.06] p-4"><p className="text-xs text-slate-400">日内估算盈亏</p><p className={"mt-2 text-2xl font-semibold " + (dailyPnl >= 0 ? "text-rose-300" : "text-emerald-300")}>{invested && known.length ? (dailyPnl > 0 ? "+" : "") + money(dailyPnl) : "—"}</p><p className="mt-1 text-xs text-slate-400">仅为估算，不代表实际收益</p></div>
               </div>
             </div>
             <div className="mb-6 grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
