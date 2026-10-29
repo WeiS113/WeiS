@@ -183,11 +183,13 @@ function inferProfile(text: string, context: Context): Profile | null {
         basis: "混合债券基准明确披露权重，合计" + (total * 100).toFixed(1) + "%",
       };
     }
-    return null;
+    // Missing/invalid weights do not end analysis immediately: fall through and try
+    // the actual disclosed bond holdings below, if their coverage is strong enough.
   }
 
-  // A single-class proxy is allowed only when the benchmark or strategy explicitly names it.
-  const exact = singleComponent(benchmark) ?? singleComponent(strategy);
+  // Do not collapse an explicitly multi-class strategy into whichever class happens
+  // to appear first in the text.
+  const exact = hasMultipleBondClasses ? null : singleComponent(benchmark) ?? singleComponent(strategy);
   if (!exact) {
     // When the benchmark is broad or vague, use disclosed bond holdings as a weighted
     // portfolio signal only if recognized holdings cover at least 70% of NAV. Unknown
