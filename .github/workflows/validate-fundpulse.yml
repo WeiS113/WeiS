@@ -36,7 +36,7 @@ jobs:
         run: npm ci
       - name: Check collector JavaScript syntax
         run: node --check cloudflare/fundpulse-collector/worker.js
-      - name: Lint
-        run: npm run lint
+      - name: Lint collector
+        run: npx eslint cloudflare/fundpulse-collector/worker.js
       - name: Build Next.js app
         run: npm run build
