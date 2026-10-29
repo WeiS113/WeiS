@@ -113,7 +113,7 @@ function parseHoldingRows(rows: unknown, assetClass: DisclosedHolding["assetClas
     const weight = num(row.JZBL ?? row.ZJZBL ?? row.WEIGHT ?? row.NAV_RATIO ?? row.PCTNV ?? row.PROPORTION);
     const rowClass: DisclosedHolding["assetClass"] = assetClass === "bond" || /债|转债/.test(name)
       ? "bond" : assetClass === "fund" ? "fund" : assetClass;
-    return { code, name, weight: weight ?? 0, assetClass: rowClass, market };
+    const resolvedMarket: DisclosedHolding["market"] = market !== "unknown" ? market : (/^\\d{6}$/.test(code) ? "domestic" : /^[A-Z][A-Z0-9.]{0,9}$/.test(code) ? "overseas" : "unknown");\n    return { code, name, weight: weight ?? 0, assetClass: rowClass, market: resolvedMarket };
   }).filter(row => row.code && row.name && row.weight > 0 && row.weight <= 100);
 }
 
