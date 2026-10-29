@@ -87,7 +87,10 @@ export async function GET(request:NextRequest){
  const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const types=await Promise.all(needsClassification.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
  const knownType=new Map(types.map(x=>[x.code,x.type]));
- const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&knownType.get(code)==="equity").slice(0,12);
+ // Index and ETF-link funds also publish portfolio holdings. When direct estimates are unavailable,
+ // use the same explicitly low-confidence, disclosed-holdings proxy rather than returning no estimate.
+ // This is not an official NAV and may be stale when the fund has rebalanced.
+ const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&["equity","index"].includes(knownType.get(code)??"")).slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
   let reason="没有有效股票持仓估算";
   const result=await estimateFromHoldings(code,msg=>{reason=msg;});
