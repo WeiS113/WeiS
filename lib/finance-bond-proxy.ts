@@ -124,12 +124,12 @@ function singleComponent(text: string): Component | null {
   if (/城投债/.test(text)) return { weight: 1, ...ETF.city };
   if (/公司债|企业债|中高等级信用债/.test(text)) return { weight: 1, ...ETF.corporate };
   if (/短期融资券|短融指数|短融债/.test(text)) return { weight: 1, ...ETF.shortCredit };
+  if (/短久期国债|国债政金|0\s*[-—至]\s*3\s*年/.test(text)) return { weight: 1, ...ETF.shortGovPolicy };
   if (/政策性金融债|政金债|国开债|国开行债券/.test(text)) return { weight: 1, ...ETF.policy };
   if (/地方政府债|地方债/.test(text)) return { weight: 1, ...(tenYear ? ETF.local10y : ETF.local5y) };
   if (/国债|利率债|政府债/.test(text)) {
     return { weight: 1, ...(longDuration ? ETF.treasury30y : tenYear ? ETF.treasury10y : fiveYear ? ETF.treasury5y : ETF.treasury5y) };
   }
-  if (/短久期国债|国债政金|0\s*[-—至]\s*3\s*年/.test(text)) return { weight: 1, ...ETF.shortGovPolicy };
   return null;
 }
 
@@ -182,7 +182,16 @@ function inferProfile(text: string, context: Context): Profile | null {
 
   // A single-class proxy is allowed only when the benchmark or strategy explicitly names it.
   const exact = singleComponent(benchmark) ?? singleComponent(strategy);
-  if (!exact) return null;
+  if (!exact) {
+    if (genericAggregate) return null;
+    const disclosedBondNames = (context.disclosedHoldings ?? []).filter(item => item.assetClass === "bond" && item.weight > 0).map(item => item.name).join(" ").toLowerCase();
+    const holdingClasses = classes.filter(item => item.pattern.test(disclosedBondNames));
+    if (holdingClasses.length === 1) {
+      const holdingProxy = singleComponent(disclosedBondNames);
+      if (holdingProxy) return { components: [holdingProxy], label: holdingProxy.label + "（按已披露债券名称识别）累计行情代理", basis: "业绩基准/策略不够具体，依据已披露债券名称判断类别；披露持仓并非完整组合" };
+    }
+    return null;
+  }
   // Generic "债券指数/中债综合" is not a sufficiently specific risk/duration match.
   if (/中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark) && !matched.length) return null;
   return {
@@ -242,7 +251,7 @@ export async function estimateBondProxy(
       confidence: "low",
       model: "bond-benchmark-cumulative-proxy",
       sourceCount: feeds.length,
-      diagnostic: "估值锚点为基金最近公布净值 " + nav.date + "；将 " + feeds.map(feed => feed.code + " 当日" + feed.change.toFixed(3) + "%、锚点后累计" + feed.cumulativeChange.toFixed(3) + "%").join("；")
+      diagnostic: "估值锚点为基金最近公布净值 " + nav.date + "；识别依据：" + profile.basis + "；将 " + feeds.map(feed => feed.code + " 当日" + feed.change.toFixed(3) + "%、锚点后累计" + feed.cumulativeChange.toFixed(3) + "%").join("；")
         + " 按披露基准权重加权，得区间变化 " + cumulativeChange.toFixed(3) + "%。模型类别：" + profile.label
         + "。这是交易所ETF价格代理，未逐券计算实际债券价格、久期、应计利息、信用利差、杠杆、现金、申赎及ETF折溢价；低置信度参考，不是基金官方净值。",
     },
