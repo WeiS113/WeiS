@@ -67,12 +67,43 @@ const BENCHMARKS: { words: RegExp; ticker: string; label: string }[] = [
   { words: /新兴市场|emerging markets|msci emerging/, ticker: "EEM", label: "新兴市场/EEM" },
   { words: /越南|vietnam/, ticker: "VNM", label: "越南/VNM" },
 ];
-function selectBenchmark(benchmark: string, strategy: string, description: string) {
+type SelectedBenchmark = {
+  components: { ticker: string; label: string; weight: number }[];
+  matchedBy: string;
+};
+function selectBenchmark(benchmark: string, strategy: string, description: string): SelectedBenchmark | null {
   // Explicit benchmark has priority over incidental mentions elsewhere in a prospectus.
   for (const text of [benchmark, strategy, description]) {
     if (!text.trim()) continue;
-    const found = BENCHMARKS.find(x => x.words.test(text));
-    if (found) return { ...found, matchedBy: text === benchmark ? "业绩基准" : text === strategy ? "投资策略" : "基金资料文本" };
+    const matchedBy = text === benchmark ? "业绩基准" : text === strategy ? "投资策略" : "基金资料文本";
+    const pieces = text.split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
+    if (pieces.length > 1) {
+      const parsed = pieces.map(piece => {
+        const matches = BENCHMARKS.filter(x => x.words.test(piece));
+        const weightMatch = piece.match(/(\\d{1,3}(?:\\.\\d+)?)\\s*%/);
+        const weight = weightMatch ? Number(weightMatch[1]) : null;
+        const cashOnly = /现金|活期存款|银行存款|货币市场|cash|deposit/i.test(piece);
+        if (matches.length === 1 && weight !== null && weight > 0 && weight <= 100) {
+          return { component: { ticker: matches[0].ticker, label: matches[0].label, weight: weight / 100 }, cashOnly: false, hasWeight: true };
+        }
+        if (cashOnly && weight !== null && weight > 0 && weight <= 100) return { component: null, cashOnly: true, hasWeight: true };
+        return { component: null, cashOnly: false, hasWeight: false };
+      });
+      const total = pieces.reduce((sum, piece) => sum + Number(piece.match(/(\\d{1,3}(?:\\.\\d+)?)\\s*%/)?.[1] ?? 0), 0);
+      const components = parsed.flatMap(item => item.component ? [item.component] : []);
+      if (components.length > 1) {
+        // Support a genuine weighted multi-market benchmark; do not guess weights when
+        // multiple markets appear in prose, and do not ignore an unmodelled bond/equity sleeve.
+        if (parsed.every(item => item.hasWeight && (item.component !== null || item.cashOnly))
+          && Math.abs(total - 100) <= 3) {
+          return { components, matchedBy };
+        }
+        return null;
+      }
+    }
+    const matches = BENCHMARKS.filter(x => x.words.test(text));
+    if (matches.length === 1) return { components: [{ ticker: matches[0].ticker, label: matches[0].label, weight: 1 }], matchedBy };
+    if (matches.length > 1) return null;
   }
   return null;
 }
@@ -115,37 +146,48 @@ export async function estimateOverseasProxy(
   const strategyText = (context.strategy ?? "").toLowerCase();
   const holdingsText = (context.disclosedHoldings ?? []).map(h => h.name).join(" ").toLowerCase();
   const combinedDescription = description + " " + holdingsText;
-  const benchmark = selectBenchmark(benchmarkText, strategyText, combinedDescription);
-  if (!benchmark) return { value: null, reason: "未能从业绩基准、投资策略或披露资料中识别足够明确的海外市场/商品标的；不因QDII标签直接套用通用指数" };
+  const selected = selectBenchmark(benchmarkText, strategyText, combinedDescription);
+  if (!selected) return { value: null, reason: "未能从业绩基准、投资策略或披露资料中识别唯一标的，或多市场基准缺少可验证的权重；不因QDII标签直接套用通用指数" };
   if (nav.date >= todayCN()) return { value: null, reason: "最近一次公布的单位净值日期已是今天，不再叠加代理行情" };
-  const [asset, fx] = await Promise.all([
-    marketHistory(benchmark.ticker, nav.date),
+  const [assets, fx] = await Promise.all([
+    Promise.all(selected.components.map(component => marketHistory(component.ticker, nav.date))),
     marketHistory("CNY=X", nav.date),
   ]);
-  if (!asset) return { value: null, reason: "海外代理行情源不可用，或缺少与正式净值日期对应的历史价格" };
+  const missing = selected.components.filter((_, index) => !assets[index]);
+  if (missing.length) return { value: null, reason: "未取得完整的海外基准历史行情：" + missing.map(x => x.label).join("、") };
+  const validAssets = assets as MarketHistory[];
   const hedged = /汇率对冲|货币对冲|外汇对冲|人民币对冲|hedged|currency hedge/.test(benchmarkText + " " + strategyText + " " + description);
   if (!fx && !hedged) return { value: null, reason: "美元兑人民币汇率历史或最新行情不可用，不能可靠换算人民币净值" };
   const fxCumulative = hedged ? 1 : fx!.latest.price / fx!.anchor.price;
   const fxDaily = hedged ? 1 : fx!.latest.price / fx!.previous.price;
-  const cumulativeReturn = (asset.latest.price / asset.anchor.price) * fxCumulative - 1;
-  const dailyReturn = (asset.latest.price / asset.previous.price) * fxDaily - 1;
+  const assetCumulativeReturn = selected.components.reduce((sum, component, index) =>
+    sum + component.weight * (validAssets[index].latest.price / validAssets[index].anchor.price - 1), 0);
+  const assetDailyReturn = selected.components.reduce((sum, component, index) =>
+    sum + component.weight * (validAssets[index].latest.price / validAssets[index].previous.price - 1), 0);
+  const cumulativeReturn = (1 + assetCumulativeReturn) * fxCumulative - 1;
+  const dailyReturn = (1 + assetDailyReturn) * fxDaily - 1;
   if (!Number.isFinite(cumulativeReturn) || Math.abs(cumulativeReturn) > 40
     || !Number.isFinite(dailyReturn) || Math.abs(dailyReturn) > 15) {
     return { value: null, reason: "海外市场/汇率代理收益超出合理校验范围，已拒绝输出估值" };
   }
-  const ageDays = Math.floor((Date.now() - asset.latest.time * 1000) / 86400000);
+  const ages = validAssets.map(asset => Math.floor((Date.now() - asset.latest.time * 1000) / 86400000));
+  const ageDays = Math.max(...ages);
   if (ageDays > 7) return { value: null, reason: "海外代理最近有效行情已滞后" + ageDays + "天，超过7天有效性窗口；避免把休市期间的旧价格当作实时估值" };
-  const time = new Date(asset.latest.time * 1000).toLocaleString("sv-SE", { timeZone: "Asia/Shanghai", hour12: false });
+  const latestTime = Math.max(...validAssets.map(asset => asset.latest.time));
+  const time = new Date(latestTime * 1000).toLocaleString("sv-SE", { timeZone: "Asia/Shanghai", hour12: false });
   const fxNote = hedged ? "基金资料显示外汇/人民币对冲，未重复叠加美元兑人民币变动" : "按美元兑人民币变动换算";
+  const componentsNote = selected.components.map((component, index) =>
+    component.label + "权重" + (component.weight * 100).toFixed(1) + "%、锚点后变化"
+      + ((validAssets[index].latest.price / validAssets[index].anchor.price - 1) * 100).toFixed(3) + "%"
+  ).join("；");
   return {
     value: {
       code, estimatedNav: nav.nav * (1 + cumulativeReturn), change: dailyReturn * 100, time,
-      source: benchmark.label + "＋" + (hedged ? "汇率对冲假设" : "美元兑人民币") + "代理（非官方净值）",
-      confidence: "low", model: "overseas-index-fx-proxy", sourceCount: hedged ? 1 : 2,
-      diagnostic: "以" + nav.date + "最近正式净值为锚；按" + benchmark.matchedBy + "匹配" + benchmark.label
-        + "，锚点后累计变化" + (asset.latest.price / asset.anchor.price * 100 - 100).toFixed(3)
-        + "%，" + fxNote + "；估值采用净值日至最新行情的累计变化，日涨跌单独按最近交易日计算。"
-        + "行情时间约距今" + Math.max(0, ageDays) + "天。未完整覆盖实际持仓权重、现金、费用、跟踪误差、基金申赎及非交易时区错位；低置信度参考，非官方净值。"
+      source: selected.components.map(x => x.label).join("＋") + "＋" + (hedged ? "汇率对冲假设" : "美元兑人民币") + "代理（非官方净值）",
+      confidence: "low", model: "overseas-index-fx-proxy", sourceCount: selected.components.length + (hedged ? 0 : 1),
+      diagnostic: "以" + nav.date + "最近正式净值为锚；按" + selected.matchedBy + "识别市场组成：" + componentsNote
+        + "；" + fxNote + "。估值采用净值日至最新行情的加权累计变化，日涨跌单独按最近交易日计算。"
+        + "行情时间约距今" + Math.max(0, ageDays) + "天。未完整覆盖实际持仓、现金、费用、跟踪误差、基金申赎及非交易时区错位；低置信度参考，非官方净值。"
     }, reason: ""
   };
 }
