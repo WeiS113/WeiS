@@ -8,6 +8,7 @@ on:
       - "app/api/cron/fundpulse-collect/**"
       - "app/api/finance/estimate/**"
       - "supabase/migrations/**"
+      - "docs/fundpulse-collector-setup.md"
       - ".github/workflows/validate-fundpulse.yml"
   push:
     branches: [feat/fundpulse-cloud-data-foundation]
