@@ -26,7 +26,7 @@ async function navHistory(code: string): Promise<NavPoint | null> {
     });
     if (!r.ok) return null;
     const text = await r.text();
-    const m = text.match(/Data_netWorthTrend\\s*=\\s*(\\[[\\s\\S]*?\\])\\s*;/);
+    const m = text.match(/Data_netWorthTrend\s*=\s*(\[[\s\S]*?\])\s*;/);
     if (!m) return null;
     const rows = JSON.parse(m[1]) as { x?: number; y?: number }[];
     const p = rows.filter(x => Number.isFinite(x.x) && Number.isFinite(x.y) && (x.y ?? 0) > 0).at(-1);
