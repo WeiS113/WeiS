@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "cloudflare/fundpulse-collector/**"
+      - "app/fundpulse/**"
+      - "app/page.tsx"
       - "app/api/cron/fundpulse-collect/**"
       - "app/api/finance/estimate/**"
       - "supabase/migrations/**"
