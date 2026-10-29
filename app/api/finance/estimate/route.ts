@@ -120,8 +120,6 @@ export async function GET(request:NextRequest){
    continue;
   }
   if(bond?.value){output.set(code,bond.value);continue;}
-  const overseas=overseasByCode.get(code);
-  if(overseas?.value){output.set(code,overseas.value);continue;}
   const fofProxy=fofByCode.get(code);
   if(fofProxy?.value){output.set(code,fofProxy.value);continue;}
   const commodityProxy=commodityByCode.get(code);
