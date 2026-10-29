@@ -1,5 +1,6 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { estimateBondProxy } from "../../../../lib/finance-bond-proxy";
+import { estimateOverseasProxy } from "../../../../lib/finance-overseas-proxy";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number };
@@ -76,8 +77,8 @@ export async function GET(request:NextRequest){
   }));
   const text=[...fields,nameHint].join(" ");
   if(/货币/.test(text))return "money";
-  if(/QDII|海外/.test(text))return "overseas";
   if(/债券|可转债/.test(text))return "bond";
+  if(/QDII|海外/.test(text))return "overseas";
   if(/联接|指数|ETF/.test(text))return "index";
   if(/股票|混合/.test(text))return "equity";
   return "unknown";
@@ -100,6 +101,10 @@ export async function GET(request:NextRequest){
  const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
+ // QDII fallback is separate from domestic stock holdings; it uses a benchmark-matched foreign proxy plus FX.
+ const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
+ const overseasResults=await Promise.all(overseasCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
+ const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
@@ -114,6 +119,8 @@ export async function GET(request:NextRequest){
   }
   const bond=bondByCode.get(code);
   if(bond?.value){output.set(code,bond.value);continue;}
+  const overseas=overseasByCode.get(code);
+  if(overseas?.value){output.set(code,overseas.value);continue;}
   const proxy=proxyByCode.get(code);
   // For equity funds, prefer a live holdings-weighted estimate when direct
   // providers are unavailable; this is the explicit fallback model, with
@@ -127,7 +134,7 @@ export async function GET(request:NextRequest){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
   const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别"};
-  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
+  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
  const results=codes.map(code=>output.get(code)!);
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
