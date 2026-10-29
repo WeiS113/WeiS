@@ -140,8 +140,12 @@ function inferProfile(text: string, context: Context): Profile | null {
 
   // A bond fund with a material stock allocation needs a joint equity/bond model.
   // Do not pass its whole NAV through a bond-only proxy.
-  const disclosedStocks = (context.disclosedHoldings ?? []).filter(item => item.assetClass === "stock" && item.weight > 0);
-  if (disclosedStocks.length > 0 || /二级债基|可转债混合|偏债混合|债券与股票|股票及债券/.test(combined)) return null;
+  const disclosedStockWeight = (context.disclosedHoldings ?? [])
+    .filter(item => item.assetClass === "stock" && item.weight > 0)
+    .reduce((sum, item) => sum + item.weight, 0);
+  // Ignore tiny disclosed stock positions as noise, but do not pretend a materially
+  // mixed portfolio is a pure bond fund when this module cannot jointly price both sleeves.
+  if (disclosedStockWeight >= 10 || /二级债基|可转债混合|偏债混合/.test(benchmark + " " + strategy)) return null;
 
   // For mixed bond benchmarks, only accept explicit percentage weights which sum to approximately 100%.
   const classes: { pattern: RegExp; key: string }[] = [
