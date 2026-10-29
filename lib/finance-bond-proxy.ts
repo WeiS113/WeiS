@@ -155,7 +155,6 @@ function inferProfile(text: string, context: Context): Profile | null {
   ];
   const matched = classes.filter(item => item.pattern.test(benchmark || strategy));
   const genericAggregate = /中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark);
-  if (genericAggregate) return null;
   const hasMultipleBondClasses = matched.length > 1;
   if (hasMultipleBondClasses) {
     const pieces = (benchmark || strategy).split(/[+＋/／;；,，]/).map(part => part.trim()).filter(Boolean);
@@ -183,17 +182,32 @@ function inferProfile(text: string, context: Context): Profile | null {
   // A single-class proxy is allowed only when the benchmark or strategy explicitly names it.
   const exact = singleComponent(benchmark) ?? singleComponent(strategy);
   if (!exact) {
-    if (genericAggregate) return null;
-    const disclosedBondNames = (context.disclosedHoldings ?? []).filter(item => item.assetClass === "bond" && item.weight > 0).map(item => item.name).join(" ").toLowerCase();
-    const holdingClasses = classes.filter(item => item.pattern.test(disclosedBondNames));
-    if (holdingClasses.length === 1) {
-      const holdingProxy = singleComponent(disclosedBondNames);
-      if (holdingProxy) return { components: [holdingProxy], label: holdingProxy.label + "（按已披露债券名称识别）累计行情代理", basis: "业绩基准/策略不够具体，依据已披露债券名称判断类别；披露持仓并非完整组合" };
+    // When the benchmark is broad or vague, use disclosed bond holdings as a weighted
+    // portfolio signal only if recognized holdings cover at least 70% of NAV. Unknown
+    // holdings are never silently reclassified as a known bond type.
+    const bondHoldings = (context.disclosedHoldings ?? []).filter(item =>
+      item.assetClass === "bond" && item.weight > 0 && item.weight <= 100
+    );
+    const grouped = new Map<string, { component: Component; weight: number }>();
+    for (const holding of bondHoldings) {
+      const component = singleComponent(holding.name.toLowerCase());
+      if (!component) continue;
+      const old = grouped.get(component.code);
+      if (old) old.weight += holding.weight / 100;
+      else grouped.set(component.code, { component, weight: holding.weight / 100 });
+    }
+    const coveredWeight = [...grouped.values()].reduce((sum, item) => sum + item.weight, 0);
+    if (grouped.size > 0 && coveredWeight >= 0.7 && coveredWeight <= 1.03) {
+      const components = [...grouped.values()].map(item => ({ ...item.component, weight: item.weight }));
+      return {
+        components,
+        label: "按已披露债券持仓类别及权重加权的ETF代理",
+        basis: "基准/策略较宽泛，识别到的债券持仓权重覆盖" + (coveredWeight * 100).toFixed(1)
+          + "%；剩余未识别资产不套用债券涨跌，持仓披露可能滞后",
+      };
     }
     return null;
   }
-  // Generic "债券指数/中债综合" is not a sufficiently specific risk/duration match.
-  if (/中债综合|中国债券综合|债券总指数|综合债券指数/.test(benchmark) && !matched.length) return null;
   return {
     components: [exact],
     label: exact.label + "累计行情代理",
