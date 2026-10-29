@@ -68,8 +68,8 @@ export async function estimateFofProxy(
   const valid = holdings.filter(h => /^\d{6}$/.test(h.code) && h.weight > 0 && h.weight <= 100);
   const unique = [...new Map(valid.map(h => [h.code, h])).values()];
   const disclosedWeight = unique.reduce((sum, h) => sum + h.weight, 0);
-  if (unique.length < 2 || disclosedWeight > 100 || disclosedWeight < 70) {
-    return { value: null, reason: "FOF底层基金披露权重有效合计为" + disclosedWeight.toFixed(1) + "%；至少需要70%且不超过100%的有效权重，当前不足以估算" };
+  if (unique.length < 2 || disclosedWeight > 100 || disclosedWeight < 85) {
+    return { value: null, reason: "FOF底层基金披露权重有效合计为" + disclosedWeight.toFixed(1) + "%；至少需要85%且不超过100%的有效权重，当前不足以估算" };
   }
   const nav = await publishedNav(code);
   if (!nav) return { value: null, reason: "无法读取FOF最近一次正式公布的单位净值及日期" };
@@ -87,7 +87,7 @@ export async function estimateFofProxy(
   }
   const covered = unique.filter(h => quoteByCode.has(h.code));
   const coverage = covered.reduce((sum, h) => sum + h.weight, 0);
-  if (coverage < 70) return { value: null, reason: "FOF底层基金当天有效估值覆盖仅" + coverage.toFixed(1) + "%，未达到70%门槛" };
+  if (coverage < 85) return { value: null, reason: "FOF底层基金当天有效估值覆盖仅" + coverage.toFixed(1) + "%，未达到85%门槛" };
   const change = covered.reduce((sum, h) => sum + h.weight * (quoteByCode.get(h.code)?.change ?? 0), 0) / 100;
   if (!Number.isFinite(change) || Math.abs(change) > 25) return { value: null, reason: "FOF底层基金加权涨跌幅异常，已拒绝输出" };
   const time = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Shanghai", hour12: false });
