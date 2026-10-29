@@ -101,6 +101,10 @@ export async function GET(request:NextRequest){
  const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
  const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
+ // QDII fallback is separate from domestic stock holdings; it uses a benchmark-matched foreign proxy plus FX.
+ const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
+ const overseasResults=await Promise.all(overseasCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
+ const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
