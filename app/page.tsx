@@ -15,6 +15,15 @@ const modules = [
     symbolColor: "text-red-600",
   },
   {
+    title: "FundPulse",
+    subtitle: "Invest with clearer signals.",
+    description: "投资总览 · 基金研究 · AI 复盘",
+    href: "/fundpulse",
+    symbol: "◉",
+    colors: "from-indigo-200/80 via-sky-100/70 to-violet-200/70",
+    symbolColor: "text-indigo-600",
+  },
+  {
     title: "Planner",
     subtitle: "Make every day count.",
     description: "计划 · 任务 · 日历",
