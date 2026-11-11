@@ -48,7 +48,7 @@ export default function FinanceTerminal(){
  useEffect(()=>{
   try{
    const p=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null");
-   const c=Array.isArray(p?.codes)?p.codes.filter((x:unknown)=>typeof x==="string"&&/^\\d{6}$/.test(x)):[];
+   const c:string[]=Array.isArray(p?.codes)?p.codes.filter((x:unknown):x is string=>typeof x==="string"&&/^\\d{6}$/.test(x)):[];
    const h=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
    setCodes([...new Set(c)]);
    setNames(p?.names&&typeof p.names==="object"?p.names:{});
