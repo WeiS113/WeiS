@@ -1,9 +1,12 @@
 import { estimateFromHoldings } from "../../../../lib/finance-holdings-estimate";
 import { estimateBondProxy } from "../../../../lib/finance-bond-proxy";
 import { estimateOverseasProxy } from "../../../../lib/finance-overseas-proxy";
+import { estimateIndexFeederProxy } from "../../../../lib/finance-index-proxy";
+import { estimateFofProxy } from "../../../../lib/finance-fof-proxy";
+import { analyzeFundComposition, type FundIntelligence } from "../../../../lib/finance-fund-intelligence";
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
-type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number };
+type Estimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; diagnostic?:string;confidence?:"high"|"medium"|"low"; model?:string; sourceCount?:number; disagreement?:number; coverage?:number; analysis?:FundIntelligence };
 const numeric=(v:unknown)=>v==null||v===""||v==="-"?null:Number.isFinite(Number(v))?Number(v):null;
 function records(value:unknown,depth=0):Record<string,unknown>[] {
  if(depth>5||value===null||typeof value!=="object")return [];
@@ -27,7 +30,7 @@ async function queryFundGz(code:string):Promise<Estimate|null>{
   if(!time||time.replaceAll("/","-").slice(0,10)!==today)return null;
   const nav=numeric(row.gsz),change=numeric(row.gszzl);
   if(nav===null||nav<=0||change===null||Math.abs(change)>100)return null;
-  return {code,name:typeof row.name==="string"?row.name:undefined,estimatedNav:nav,change,time,source:"天天基金 fundgz 备用估值（非官方净值）",confidence:"medium",model:"fundgz-fallback",sourceCount:1,diagnostic:"备用单源估值；建议与其他来源交叉核对"};
+  return {code,name:typeof row.name==="string"?row.name:undefined,estimatedNav:nav,change,time,source:"天天基金 fundgz 备用估值（非官方净值）",confidence:"low",model:"fundgz-fallback",sourceCount:1,diagnostic:"备用单源估值；未与独立模型交叉验证，置信度低，需与基金公司净值核对"};
  }catch{return null;}
 }
 async function query(host:string,codes:string[]):Promise<Map<string,Estimate>>{
@@ -60,6 +63,7 @@ export async function GET(request:NextRequest){
  // Previously this request ran only after classification and holdings-based estimation,
  // so the browser's 15-second timeout could discard the entire response before it arrived.
  const fundGzResultsPromise=Promise.all(codes.map(async code=>({code,value:await queryFundGz(code)})));
+ const profileResultsPromise=Promise.all(codes.map(async code=>({code,profile:await analyzeFundComposition(code)})));
  const responses=await Promise.all(hosts.map(async host=>{
   try{return await query(host,codes);}catch{return new Map<string,Estimate>();}
  }));
@@ -67,76 +71,77 @@ export async function GET(request:NextRequest){
  for(const code of codes)candidates.set(code,responses.map(r=>r.get(code)).filter((e):e is Estimate=>Boolean(e&&e.estimatedNav!==null&&e.change!==null&&e.time)));
  const fundGzResults=await fundGzResultsPromise;
  const fundGzByCode=new Map(fundGzResults.filter(x=>x.value).map(x=>[x.code,x.value as Estimate]));
- const classify=async(code:string,nameHint=""):Promise<string>=>{
-  const urls=["FundMNDetailInformation","FundMNBasicInformation"].map(path=>
-   "https://fundmobapi.eastmoney.com/FundMNewApi/"+path+"?FCODE="+code+"&deviceid=Wap&plat=WAP&product=EFund&version=2.0.0");
-  const fields=await Promise.all(urls.map(async url=>{
-   try{const r=await fetch(url,{next:{revalidate:3600},signal:AbortSignal.timeout(4500)});if(!r.ok)return "";
-    const d=(await r.json())?.Datas;return [d?.FTYPE,d?.FUNDTYPE,d?.SHORTNAME,d?.NAME,d?.FUNDTYPE_NAME].filter(Boolean).join(" ");
-   }catch{return "";}
-  }));
-  const text=[...fields,nameHint].join(" ");
-  if(/货币/.test(text))return "money";
-  if(/债券|可转债/.test(text))return "bond";
-  if(/QDII|海外/.test(text))return "overseas";
-  if(/联接|指数|ETF/.test(text))return "index";
-  if(/股票|混合/.test(text))return "equity";
-  return "unknown";
- };
- // Classification is only needed for fallback estimators. Avoid two extra provider requests
- // for every fund when the primary valuation sources already returned valid data.
- const needsClassification=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
- const types=await Promise.all(needsClassification.map(async code=>({code,type:await classify(code,responses.map(r=>r.get(code)?.name).find(Boolean)??"")})));
- const knownType=new Map(types.map(x=>[x.code,x.type]));
+ // Analyze each fund's metadata and disclosed composition, even when a provider returns a direct estimate.
+ // This keeps the model selection and portfolio review tied to the fund's evidence rather than its name alone.
+ const profileResults=await profileResultsPromise;
+ const profilesByCode=new Map(profileResults.map(x=>[x.code,x.profile]));
+ const mapClass=(v:string):string=>v==="money"?"money":v==="bond"?"bond":v==="overseas"?"overseas":v==="commodity"?"commodity":v==="fof"?"fof":v==="index"?"index":v==="equity"?"equity":v==="mixed"?"mixed":v;
+ const knownType=new Map(profileResults.map(x=>[x.code,mapClass(x.profile.classification)]));
  // Index and ETF-link funds also publish portfolio holdings. When direct estimates are unavailable,
  // use the same explicitly low-confidence, disclosed-holdings proxy rather than returning no estimate.
  // This is not an official NAV and may be stale when the fund has rebalanced.
- const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&["equity","index"].includes(knownType.get(code)??"")).slice(0,12);
+ const fallbackCodes=codes.filter(code=>(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&["equity","index"].includes(knownType.get(code)??"")&&!(knownType.get(code)==="index"&&profilesByCode.get(code)?.underlyingEtf)).slice(0,12);
  const proxies=await Promise.all(fallbackCodes.map(async code=>{
   let reason="没有有效股票持仓估算";
   const result=await estimateFromHoldings(code,msg=>{reason=msg;});
   return {code,result,reason};
  }));
  const proxyByCode=new Map(proxies.map(x=>[x.code,x]));
- const bondCodes=codes.filter(code=>knownType.get(code)==="bond"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
- const bondResults=await Promise.all(bondCodes.map(async code=>({code,reply:await estimateBondProxy(code)})));
+ const bondCodes=codes.filter(code=>knownType.get(code)==="bond");
+ const bondResults=await Promise.all(bondCodes.map(async code=>{const profile=profilesByCode.get(code);return {code,reply:await estimateBondProxy(code,{benchmark:profile?.benchmark,strategy:profile?.strategy,disclosedHoldings:profile?.disclosedHoldings??[]})};}));
  const bondByCode=new Map(bondResults.map(x=>[x.code,x.reply]));
  // QDII fallback is separate from domestic stock holdings; it uses a benchmark-matched foreign proxy plus FX.
- const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
- const overseasResults=await Promise.all(overseasCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
+ const overseasCodes=codes.filter(code=>knownType.get(code)==="overseas");
+ const overseasResults=await Promise.all(overseasCodes.map(async code=>{const profile=profilesByCode.get(code);return {code,reply:await estimateOverseasProxy(code,{benchmark:profile?.benchmark,strategy:profile?.strategy,disclosedHoldings:profile?.disclosedHoldings??[]})};}));
  const overseasByCode=new Map(overseasResults.map(x=>[x.code,x.reply]));
+ const indexCodes=codes.filter(code=>knownType.get(code)==="index"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code)&&Boolean(profilesByCode.get(code)?.underlyingEtf));
+ const indexResults=await Promise.all(indexCodes.map(async code=>{const underlying=profilesByCode.get(code)!.underlyingEtf!;return {code,reply:await estimateIndexFeederProxy(code,underlying.code,underlying.name)};}));
+ const indexByCode=new Map(indexResults.map(x=>[x.code,x.reply]));
+ const commodityCodes=codes.filter(code=>knownType.get(code)==="commodity"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
+ const commodityResults=await Promise.all(commodityCodes.map(async code=>({code,reply:await estimateOverseasProxy(code)})));
+ const commodityByCode=new Map(commodityResults.map(x=>[x.code,x.reply]));
+ const fofCodes=codes.filter(code=>knownType.get(code)==="fof"&&(candidates.get(code)?.length??0)===0&&!fundGzByCode.has(code));
+ const fofResults=await Promise.all(fofCodes.map(async code=>{const holdings=(profilesByCode.get(code)?.disclosedHoldings??[]).filter(h=>h.assetClass==="fund").map(h=>({code:h.code,name:h.name,weight:h.weight}));return {code,reply:await estimateFofProxy(code,holdings)};}));
+ const fofByCode=new Map(fofResults.map(x=>[x.code,x.reply]));
  for(const code of codes){
   const list=candidates.get(code)??[];
   const type=knownType.get(code)??"unknown";
+  const bond=bondByCode.get(code);
+  const overseas=overseasByCode.get(code);
+  if(type==="bond"&&bond?.value){output.set(code,bond.value);continue;}
+  if(type==="overseas"&&overseas?.value){output.set(code,overseas.value);continue;}
   if(list.length){
    // Prefer two agreeing fresh providers. Never average wildly divergent values.
    const ordered=[...list].sort((a,b)=>String(b.time).localeCompare(String(a.time)));
    const selected=ordered[0];
    const agreement=ordered.filter(x=>Math.abs((x.change??0)-(selected.change??0))<=0.35);
    const disagreement=ordered.length>1?Math.max(...ordered.map(x=>Math.abs((x.change??0)-(selected.change??0)))):0;
-   output.set(code,{...selected,confidence:agreement.length>=2?"high":"medium",model:"direct",sourceCount:ordered.length,disagreement,diagnostic:ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
+   output.set(code,{...selected,confidence:agreement.length>=2?"medium":"low",model:type==="bond"?"bond-third-party-fallback":"direct",sourceCount:ordered.length,disagreement,diagnostic:type==="bond"?"债券专用基准模型未能建立："+(bond?.reason||"缺少可验证的匹配基准行情")+"；当前采用第三方估值，不能视为已按真实债券组合计算。"+(ordered.length>1&&disagreement>0.35?"多个来源差异较大。":""):type==="overseas"?"海外专用指数/汇率模型未能建立："+(overseas?.reason||"缺少可验证的匹配标的行情")+"；当前采用第三方估值，未按基金实际境外组合完整建模。":ordered.length>1&&disagreement>0.35?"数据源估值差异较大，优先采用时间较新的来源":selected.diagnostic});
    continue;
   }
-  const bond=bondByCode.get(code);
   if(bond?.value){output.set(code,bond.value);continue;}
-  const overseas=overseasByCode.get(code);
-  if(overseas?.value){output.set(code,overseas.value);continue;}
+  const fofProxy=fofByCode.get(code);
+  if(fofProxy?.value){output.set(code,fofProxy.value);continue;}
+  const commodityProxy=commodityByCode.get(code);
+  if(commodityProxy?.value){output.set(code,{...commodityProxy.value,model:"commodity-gold-fx-proxy",source:"黄金ETF＋美元兑人民币代理（非官方净值）",diagnostic:"仅在基金资料明确匹配黄金标的时使用黄金ETF及汇率代理；不适用于原油/其他商品期货，未覆盖期货换月、基差及基金费用"});continue;}
+  const indexProxy=indexByCode.get(code);
+  if(indexProxy?.value){output.set(code,indexProxy.value);continue;}
   const proxy=proxyByCode.get(code);
   // For equity funds, prefer a live holdings-weighted estimate when direct
   // providers are unavailable; this is the explicit fallback model, with
   // coverage and constituent quotes available for disclosure in the UI.
-  if(type==="equity"&&proxy?.result){
+  if((type==="equity"||type==="index")&&proxy?.result){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
   const fundGz=fundGzByCode.get(code);
-  if(fundGz){output.set(code,fundGz);continue;}
+  if(fundGz){output.set(code,type==="bond"?{...fundGz,model:"bond-third-party-fallback",diagnostic:"债券专用基准模型未能建立："+(bond?.reason||"缺少可验证的匹配基准行情")+"；当前采用单一第三方估值，不能视为已按真实债券组合计算。"}:fundGz);continue;}
   if(proxy?.result){
    output.set(code,{...proxy.result,confidence:"low",model:"equity-holdings",sourceCount:1});continue;
   }
-  const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票和混合",unknown:"待识别"};
-  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="index"?"指数联接需核对实际标的指数或ETF，当前未取得可信映射":proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
+  const typeName:Record<string,string>={bond:"债券及可转债",money:"货币",overseas:"海外市场",index:"指数或联接",equity:"股票型",mixed:"混合资产",unknown:"待识别",commodity:"商品/贵金属",fof:"FOF/养老目标"};
+  output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="commodity"?(commodityProxy?.reason||"已识别为商品策略，但未取得经核验的商品基准/期货合约及汇率数据，拒绝套用股票模型"):type==="fof"?(fofProxy?.reason||"已识别为FOF；未取得可用的底层基金权重与同日净值，拒绝用股票行情代替底层组合"):type==="money"?"货币基金不应使用股票涨跌代理；请以基金公司公布的万份收益/七日年化及净值为准":type==="mixed"?"混合基金的股票、债券、现金等权重未被完整核验，不将部分股票持仓涨跌外推为整只基金收益":type==="index"?(indexProxy?.reason||"指数/联接基金尚未取得可验证的跟踪指数/底层ETF及对应交易日收益，未用不匹配指数代替"):proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
- const results=codes.map(code=>output.get(code)!);
+ const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
  return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
 }
