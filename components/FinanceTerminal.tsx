@@ -104,8 +104,8 @@ export default function FinanceTerminal(){
   finally{setBusy(false);}
  },[codes]);
  useEffect(()=>{void refreshIndices();const id=window.setInterval(()=>void refreshIndices(),60000);return()=>window.clearInterval(id);},[refreshIndices]);
- useEffect(()=>{if(codes.length)void refreshFunds(codes);},[codes.join(","),refreshFunds]);
- useEffect(()=>{if(!codes.length)return;const id=window.setInterval(()=>{if(document.visibilityState==="visible")void refreshFunds(codes);},300000);return()=>window.clearInterval(id);},[codes.join(","),refreshFunds]);
+ useEffect(()=>{if(codes.length)void refreshFunds();},[refreshFunds]);
+ useEffect(()=>{if(!codes.length)return;const id=window.setInterval(()=>{if(document.visibilityState==="visible")void refreshFunds();},300000);return()=>window.clearInterval(id);},[refreshFunds]);
  useEffect(()=>{
   const q=query.trim();
   if(q.length<2){setHits([]);return;}
