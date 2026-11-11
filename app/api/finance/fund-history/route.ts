@@ -6,7 +6,7 @@ const headers = { "User-Agent": "Mozilla/5.0", Referer: "https://fund.eastmoney.
 
 async function mobileHistory(code: string): Promise<Point[]> {
   const u = new URL("https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList");
-  for (const [k,v] of Object.entries({FCODE:code,pageIndex:"1",pageSize:"120",plat:"Iphone",product:"EFund",version:"6.5.5"}))u.searchParams.set(k,v);
+  for (const [k,v] of Object.entries({FCODE:code,pageIndex:"1",pageSize:"365",plat:"Iphone",product:"EFund",version:"6.5.5"}))u.searchParams.set(k,v);
   const res = await fetch(u,{headers,cache:"no-store",signal:AbortSignal.timeout(7000)});
   if(!res.ok)throw Error("mobile API failed");
   const json = await res.json();
@@ -23,7 +23,7 @@ async function publicHistory(code: string): Promise<Point[]> {
   if(!match)throw Error("missing trend data");
   const rows: unknown = JSON.parse(match[1]);
   if(!Array.isArray(rows))throw Error("invalid trend data");
-  return rows.slice(-120).map((v:unknown)=>{
+  return rows.slice(-365).map((v:unknown)=>{
     const row = v as {x?:unknown;y?:unknown};
     const millis = Number(row?.x);
     const date = Number.isFinite(millis) && millis > 1e11 ? new Date(millis).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"}) : "";
@@ -58,7 +58,7 @@ export async function GET(request:NextRequest) {
     const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
     if(latest.status==="fulfilled"&&latest.value&&latest.value.date<=today)points.push(latest.value);
     for(const p of points)if(/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.close)&&p.close>0)unique.set(p.date,p);
-    const result=[...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-120);
+    const result=[...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-365);
     if(result.length<2)throw Error("No history");
     return NextResponse.json({code,points:result,source:"历史单位净值"},{headers:{"Cache-Control":"no-store"}});
   } catch { return NextResponse.json({error:"历史净值暂无可靠数据"},{status:502}); }
