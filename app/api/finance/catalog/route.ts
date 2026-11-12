@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 type Fund = {code:string;name:string;type:string;pinyin:string;fullPinyin:string};
 export async function GET(){
  try{
