@@ -42,7 +42,9 @@ async function fetchQuote(item:Instrument):Promise<Quote>{
     const result=payload?.chart?.result?.[0];
     if(payload?.chart?.error||!result?.meta)throw new Error("上游未返回有效行情");
     const meta=result.meta;
-    const price=finite(meta.regularMarketPrice);
+    const rawPrice=finite(meta.regularMarketPrice);
+    const isYield=item.symbol==="^TNX";
+    const price=rawPrice===null?null:isYield?rawPrice/10:rawPrice;
     const previous=finite(meta.chartPreviousClose??meta.previousClose);
     const timestamp=finite(meta.regularMarketTime);
     if(price===null||price<=0)throw new Error("报价字段缺失");
@@ -50,8 +52,8 @@ async function fetchQuote(item:Instrument):Promise<Quote>{
     return {
       ...empty,
       price,
-      change:previous!==null&&previous>0?(price/previous-1)*100:null,
-      currency:typeof meta.currency==="string"?meta.currency:null,
+      change:!isYield&&previous!==null&&previous>0?(price/previous-1)*100:null,
+      currency:isYield?"%":typeof meta.currency==="string"?meta.currency:null,
       exchange:typeof meta.fullExchangeName==="string"?meta.fullExchangeName:typeof meta.exchangeName==="string"?meta.exchangeName:null,
       asOf:timestamp!==null?new Date(timestamp*1000).toISOString():null,
       marketState,
