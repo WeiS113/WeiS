@@ -19,6 +19,12 @@ export type FundIntelligence = {
   disclosedFundWeight: number;
   evidence: string[];
   notes: string[];
+  manager: string | null;
+  managerSince: string | null;
+  fundScale: number | null;
+  managementFee: number | null;
+  custodyFee: number | null;
+  riskLevel: string | null;
 };
 
 const HEADERS = { "User-Agent": "Mozilla/5.0", "Referer": "https://fund.eastmoney.com/" };
@@ -143,6 +149,13 @@ export async function analyzeFundComposition(code: string): Promise<FundIntellig
     ?? pickText(detail, /BENCH(MARK)?|INDEXNAME|TRACKINGINDEX/i);
   const strategy = getText(detail, ["INVESTMENT_STRATEGY", "STRATEGY", "INVESTMENT_SCOPE", "INVESTMENTTYPE", "FUNDTYPE_NAME", "COMMENTS"])
     ?? getText(basic, ["INVESTMENT_STRATEGY", "STRATEGY", "INVESTMENT_SCOPE", "COMMENTS"]);
+  const manager = getText(detail, ["MANAGERNAME", "FUND_MANAGER_NAME", "FUND_MANAGER", "MANAGER", "JJJL", "JJJLMC", "MANAGER_NAME"]) ?? getText(basic, ["MANAGERNAME", "FUND_MANAGER_NAME", "FUND_MANAGER", "MANAGER", "JJJL", "JJJLMC", "MANAGER_NAME"]);
+  const managerSince = getText(detail, ["MANAGERSTARTDATE", "MANAGER_SINCE", "MANAGERDATE", "JJKSRQ", "WORKDATE"]) ?? getText(basic, ["MANAGERSTARTDATE", "MANAGER_SINCE", "MANAGERDATE", "JJKSrq", "WORKDATE"]);
+  const scaleRaw = detail.NETASSET ?? detail.FUNDSCALE ?? detail.JJGM ?? detail.SCALE ?? basic.NETASSET ?? basic.FUNDSCALE ?? basic.JJGM ?? basic.SCALE;
+  const fundScale = num(scaleRaw);
+  const managementFee = num(detail.MANAGEMENTFEE ?? detail.MANAGEMENT_RATE ?? detail.GLFY ?? basic.MANAGEMENTFEE ?? basic.MANAGEMENT_RATE ?? basic.GLFY);
+  const custodyFee = num(detail.CUSTODYFEE ?? detail.CUSTODY_RATE ?? detail.TGFY ?? basic.CUSTODYFEE ?? basic.CUSTODY_RATE ?? basic.TGFY);
+  const riskLevel = getText(detail, ["RISKLEVEL", "RISK_LEVEL", "RISK", "FENGXIANLEVEL", "FXDJ"]) ?? getText(basic, ["RISKLEVEL", "RISK_LEVEL", "RISK", "FENGXIANLEVEL", "FXDJ"]);
   const underlyingCode = getText(positions, ["ETFCODE", "ETFCode", "etfCode"]);
   const underlyingName = getText(positions, ["ETFSHORTNAME", "ETFNAME", "etfShortName"]);
   const underlyingEtf = underlyingCode ? { code: underlyingCode, name: underlyingName ?? "底层ETF" } : null;
@@ -197,5 +210,11 @@ export async function analyzeFundComposition(code: string): Promise<FundIntellig
     disclosedFundWeight,
     evidence,
     notes,
+    manager,
+    managerSince,
+    fundScale,
+    managementFee,
+    custodyFee,
+    riskLevel,
   };
 }
