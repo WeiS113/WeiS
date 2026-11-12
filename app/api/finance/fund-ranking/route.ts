@@ -18,7 +18,7 @@ export async function GET(request:NextRequest){
  const page=Math.max(1,Math.min(100,Number(q.get("page")||1)));
  const pageSize=Math.max(10,Math.min(100,Number(q.get("pageSize")||50)));
  const selected=PERIODS[period]||PERIODS.year;
- const end=new Date(),start=new Date(end);start.setFullYear(start.getFullYear()-3);
+ const end=new Date(),start=new Date(end.getTime());start.setFullYear(start.getFullYear()-3);
  const date=(d:Date)=>d.toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
  const url=new URL("https://fund.eastmoney.com/data/rankhandler.aspx");
  for(const [k,v] of Object.entries({op:"ph",dt:"kf",ft:"all",rs:"",gs:"0",sc:selected.sort,st:"desc",sd:date(start),ed:date(end),qdii:"",tabSubtype:",,,,,",pi:String(page),pn:String(pageSize),dx:"1"}))url.searchParams.set(k,v);
