@@ -101,6 +101,9 @@ export default function MyHoldings() {
   const daily = rows.reduce((s, x) => s + (x.daily ?? 0), 0);
   const priced = rows.filter(x => x.marketValue != null).length;
   const costRows = rows.filter(x => x.costValue != null).length;
+  const pnlComplete = rows.length > 0 && rows.every(x => x.pnl != null);
+  const costComplete = rows.length > 0 && rows.every(x => x.costValue != null);
+  const pnlRate = pnlComplete && costTotal > 0 ? pnl / costTotal * 100 : null;
   const allocations = useMemo(() => {
     const groups = new Map<string, number>();
     rows.forEach(x => { if (x.marketValue != null) { const k = asset(x.type); groups.set(k, (groups.get(k) || 0) + x.marketValue); } });
@@ -135,9 +138,9 @@ export default function MyHoldings() {
       </div>
       <div className="grid gap-3 px-5 py-5 sm:grid-cols-2 sm:px-7 xl:grid-cols-4">
         <div><p className="text-[10px] text-slate-400">持仓总市值</p><p className="mt-2 text-2xl font-semibold tabular-nums">{priced ? money(value) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">{priced}/{rows.length} 只已取得净值</p></div>
-        <div><p className="text-[10px] text-slate-400">持仓累计盈亏</p><p className={"mt-2 text-2xl font-semibold tabular-nums " + (pnl >= 0 ? "text-rose-300" : "text-emerald-300")}>{costRows ? money(pnl) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">{costRows}/{rows.length} 只已录入成本</p></div>
+        <div><p className="text-[10px] text-slate-400">持仓累计盈亏</p><p className={"mt-2 text-2xl font-semibold tabular-nums " + (pnl >= 0 ? "text-rose-300" : "text-emerald-300")}>{pnlComplete ? money(pnl) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">{pnlComplete ? "累计收益率 " + percent(pnlRate) : costRows + "/" + rows.length + " 只具备成本与净值，暂不汇总"}</p></div>
         <div><p className="text-[10px] text-slate-400">当日持仓盈亏</p><p className="mt-2 text-2xl font-semibold tabular-nums">{dailyComplete ? money(daily) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">{dailyComplete ? "按有效净值涨跌计算" : "等待全部基金取得当日有效净值"}</p></div>
-        <div><p className="text-[10px] text-slate-400">累计投入成本</p><p className="mt-2 text-2xl font-semibold tabular-nums">{costTotal > 0 ? money(costTotal) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">持有份额 × 单位成本</p></div>
+        <div><p className="text-[10px] text-slate-400">累计投入成本</p><p className="mt-2 text-2xl font-semibold tabular-nums">{costComplete ? money(costTotal) : "—"}</p><p className="mt-1 text-[10px] text-slate-400">{costComplete ? "全部基金成本数据完整" : costRows + "/" + rows.length + " 只已录入成本"}</p></div>
       </div>
       <div className="flex flex-wrap justify-between gap-2 border-t border-white/10 bg-white/[.035] px-5 py-3 text-[10px] text-slate-400 sm:px-7"><span>净值刷新：{updated || "等待首次刷新"}</span><span>基金公司净值可能滞后；不以盘中估值冒充正式净值</span></div>
     </div>
