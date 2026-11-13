@@ -84,7 +84,8 @@ export default function MyHoldings() {
         ...portfolio.codes.map(c => fetch("/api/finance/quote?kind=fund&code=" + c, { cache: "no-store" }).catch(() => null)),
       ]);
       const estimatePayload = estimateResponse?.ok ? await estimateResponse.json().catch(() => null) : null;
-      const estimates = new Map<string, any>((Array.isArray(estimatePayload?.estimates) ? estimatePayload.estimates : []).map((x: any) => [String(x.code), x]));
+      const estimates = new Map<string, any>();
+      for (const item of (Array.isArray(estimatePayload?.estimates) ? estimatePayload.estimates : [])) estimates.set(String(item.code), item);
       const official = await Promise.all(officialResponses.map(async (response, index) => {
         if (!response?.ok) return null;
         try { return await response.json() as Quote; } catch { return null; }
@@ -95,7 +96,7 @@ export default function MyHoldings() {
         const e = estimates.get(c);
         const estimateDate = typeof e?.time === "string" ? e.time.replaceAll("/", "-").slice(0, 10) : "";
         if (e && estimateDate === today && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0) {
-          next[c] = { code: c, name: e.name || official[index]?.name || c, price: Number(e.estimatedNav), change: Number.isFinite(Number(e.change)) ? Number(e.change) : null, time: e.time, source: e.source, dataType: "盘中估算", confidence: e.confidence };
+          next[c] = { code: c, name: e.name || official[index]?.name || c, price: Number(e.estimatedNav), change: e.change != null && Number.isFinite(Number(e.change)) ? Number(e.change) : null, time: e.time, source: e.source, dataType: "盘中估算", confidence: e.confidence };
         } else if (official[index]?.price != null) {
           next[c] = { ...official[index]!, dataType: "正式净值" };
         } else if (e && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0) {
