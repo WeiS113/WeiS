@@ -28,10 +28,14 @@ async function stockQuote(code:string):Promise<StockQuote>{
 export async function GET(request:NextRequest){
  const codes=[...new Set((request.nextUrl.searchParams.get("codes")||"").split(",").map(x=>x.trim()).filter(x=>/^\d{6}$/.test(x)))].slice(0,30);
  if(!codes.length)return NextResponse.json({error:"请提供有效基金代码"},{status:400});
- const profiles=await Promise.all(codes.map(async code=>{
-  try{return {code,profile:await analyzeFundComposition(code),error:null};}
-  catch{return {code,profile:null,error:"公开持仓资料暂不可用"};}
- }));
+ const profiles:{code:string;profile:Awaited<ReturnType<typeof analyzeFundComposition>>|null;error:string|null}[]=[];
+ for(let i=0;i<codes.length;i+=5){
+  const batch=await Promise.all(codes.slice(i,i+5).map(async code=>{
+   try{return {code,profile:await analyzeFundComposition(code),error:null};}
+   catch{return {code,profile:null,error:"公开持仓资料暂不可用"};}
+  }));
+  profiles.push(...batch);
+ }
  const stockMap=new Map<string,{code:string;name:string;weight:number;fundCodes:string[]}>();
  for(const item of profiles){
   for(const holding of item.profile?.disclosedHoldings??[]){
