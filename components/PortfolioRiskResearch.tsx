@@ -140,10 +140,18 @@ export default function PortfolioRiskResearch(){
  const exposureTotal=exposures.reduce((s,x)=>s+x.marketValue,0);
  const classTotals=useMemo(()=>{
   const out:Record<string,number>={stock:0,bond:0,fund:0,other:0,overseas:0,commodity:0};
-  for(const row of rows){const profile=profileMap.get(row.code);if(row.marketValue===null||!profile)continue;const mapped=profile.disclosedHoldings.reduce((sum,h)=>sum+h.weight,0);const amount=row.marketValue*Math.min(100,mapped)/100;if(profile.classification==="overseas")out.overseas+=amount;else if(profile.classification==="commodity")out.commodity+=amount;}
-  for(const item of exposures)out[item.assetClass]=(out[item.assetClass]||0)+item.marketValue;
+  for(const row of rows){
+   if(row.marketValue===null)continue;
+   const profile=profileMap.get(row.code);if(!profile)continue;
+   for(const item of profile.disclosedHoldings||[]){
+    const amount=row.marketValue*item.weight/100;
+    if(profile.classification==="overseas")out.overseas+=amount;
+    else if(profile.classification==="commodity")out.commodity+=amount;
+    else out[item.assetClass]=(out[item.assetClass]||0)+amount;
+   }
+  }
   return out;
- },[exposures]);
+ },[rows,lookthrough]);
  const overlap=exposures.filter(x=>x.fundCount>1).sort((a,b)=>b.marketValue-a.marketValue);
  const concentration=exposureTotal>0?exposures.reduce((s,x)=>s+(x.marketValue/exposureTotal)**2,0)*10000:null;
  const weightedCoverage=rows.reduce((s,row)=>{
