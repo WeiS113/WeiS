@@ -125,10 +125,11 @@ export default function FinanceResearchCenter(){
    let names={...localNames,[f.code]:f.name};
    let holdings=localHoldings&&typeof localHoldings==="object"?localHoldings:{};
    if(user){
-    const {data:remote}=await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id",user.id).maybeSingle();
+    const {data:remote,error:readError}=await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id",user.id).maybeSingle();
+    if(readError)throw readError;
     codes=[...new Set([...(Array.isArray(remote?.codes)?remote.codes.filter((x:unknown):x is string=>typeof x==="string"&&/^\d{6}$/.test(x)):[]),...codes])];
     names={...(remote?.names&&typeof remote.names==="object"?remote.names:{}),...names};
-    holdings={...(remote?.holdings&&typeof remote.holdings==="object"?remote.holdings:{}),...holdings};
+    holdings=remote?.holdings&&typeof remote.holdings==="object"?remote.holdings:holdings;
     const {error}=await supabase.from("finance_portfolios").upsert({user_id:user.id,codes,names,holdings,updated_at:new Date().toISOString()},{onConflict:"user_id"});
     if(error)throw error;
    }
