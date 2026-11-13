@@ -18,8 +18,11 @@ function readLocal(): Portfolio {
   try {
     const p = JSON.parse(localStorage.getItem(PK) || "null");
     const h = JSON.parse(localStorage.getItem(HK) || "{}");
-    const removed = new Set(JSON.parse(localStorage.getItem(RK) || "[]"));
-    return { codes: Array.isArray(p?.codes) ? [...new Set(p.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x)))] : [], names: p?.names || {}, holdings: h || {} };
+    const removedRaw: unknown[] = JSON.parse(localStorage.getItem(RK) || "[]");
+    const removed = new Set<string>(removedRaw.filter((x): x is string => typeof x === "string"));
+    const rawCodes: unknown[] = Array.isArray(p?.codes) ? p.codes : [];
+    const validCodes = rawCodes.filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x));
+    return { codes: [...new Set<string>(validCodes)], names: p?.names || {}, holdings: h || {} };
   } catch { return { codes: [], names: {}, holdings: {} }; }
 }
 function Panel({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
