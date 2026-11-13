@@ -66,7 +66,7 @@ export default function PortfolioRiskResearch(){
     const p=JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||"null");
     const removedRaw=JSON.parse(localStorage.getItem(REMOVED_KEY)||"[]");
     const removed=new Set(Array.isArray(removedRaw)?removedRaw:[]);
-    const localCodes=Array.isArray(p?.codes)?p.codes.filter((x:unknown)=>typeof x==="string"&&/^\\d{6}$/.test(x)&&!removed.has(x)):[];
+    const localCodes=Array.isArray(p?.codes)?p.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)&&!removed.has(x)):[];
     const localHoldings=JSON.parse(localStorage.getItem(HOLDINGS_KEY)||"{}");
     setCodes(localCodes);setNames(p?.names&&typeof p.names==="object"?p.names:{});setHoldings(localHoldings&&typeof localHoldings==="object"?localHoldings:{});
    }catch{setCodes([]);setNames({});setHoldings({});}
@@ -76,7 +76,7 @@ export default function PortfolioRiskResearch(){
    if(cancelled||authError||!data.user)return;
    const {data:remote,error:readError}=await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id",data.user.id).maybeSingle();
    if(cancelled||readError||!remote)return;
-   const cloudCodes=Array.isArray(remote.codes)?remote.codes.filter((x:unknown)=>typeof x==="string"&&/^\\d{6}$/.test(x)):[];
+   const cloudCodes=Array.isArray(remote.codes)?remote.codes.filter((x:unknown)=>typeof x==="string"&&/^\d{6}$/.test(x)):[];
    const cloudNames=remote.names&&typeof remote.names==="object"?remote.names:{};
    const cloudHoldings=remote.holdings&&typeof remote.holdings==="object"?remote.holdings:{};
    setCodes(cloudCodes);setNames(cloudNames as Record<string,string>);setHoldings(cloudHoldings as Record<string,Holding>);
