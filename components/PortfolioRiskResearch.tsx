@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
+import type {ReactNode} from "react";
 import {supabase} from "../lib/supabase";
 
 type Holding={quantity:number;cost:number};
@@ -21,7 +22,7 @@ const cls=(n:number|null|undefined)=>n==null?"text-slate-400":n>=0?"text-rose-60
 const dateText=(v:string|null|undefined)=>v?String(v).replaceAll("/","-").slice(0,10):"日期未知";
 const assetLabel=(v:string)=>v==="stock"?"股票":v==="bond"?"债券":v==="fund"?"基金/ETF":"其他资产";
 const typeLabel=(v:string)=>({money:"货币基金",bond:"债券基金",overseas:"QDII/海外",commodity:"商品/贵金属",fof:"FOF/养老",index:"指数/ETF联接",equity:"股票基金",mixed:"混合基金",unknown:"待识别"} as Record<string,string>)[v]||"待识别";
-function Card({title,sub,action,children}:{title:string;sub?:string;action?:React.ReactNode;children:React.ReactNode}){
+function Card({title,sub,action,children}:{title:string;sub?:string;action?:ReactNode;children:ReactNode}){
  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_28px_rgba(15,23,42,.035)]"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-bold tracking-tight text-slate-900">{title}</h2>{sub&&<p className="mt-1 text-xs leading-5 text-slate-500">{sub}</p>}</div>{action}</div>{children}</section>;
 }
 function Metric({label,value,note,tone}:{label:string;value:string;note?:string;tone?:string}){
@@ -138,7 +139,8 @@ export default function PortfolioRiskResearch(){
  },[rows,lookthrough]);
  const exposureTotal=exposures.reduce((s,x)=>s+x.marketValue,0);
  const classTotals=useMemo(()=>{
-  const out:Record<string,number>={stock:0,bond:0,fund:0,other:0};
+  const out:Record<string,number>={stock:0,bond:0,fund:0,other:0,overseas:0,commodity:0};
+  for(const row of rows){const profile=profileMap.get(row.code);if(row.marketValue===null||!profile)continue;const mapped=profile.disclosedHoldings.reduce((sum,h)=>sum+h.weight,0);const amount=row.marketValue*Math.min(100,mapped)/100;if(profile.classification==="overseas")out.overseas+=amount;else if(profile.classification==="commodity")out.commodity+=amount;}
   for(const item of exposures)out[item.assetClass]=(out[item.assetClass]||0)+item.marketValue;
   return out;
  },[exposures]);
@@ -170,7 +172,7 @@ export default function PortfolioRiskResearch(){
  const stressLoss=useMemo(()=>{
   const equity=classTotals.stock*stressEquity/100;
   const bonds=classTotals.bond*stressBond/100;
-  const overseas=0,commodity=0;
+  const overseas=classTotals.overseas*stressOverseas/100,commodity=classTotals.commodity*stressCommodity/100;
   return {equity,bonds,overseas,commodity,total:equity+bonds+overseas+commodity};
  },[classTotals,stressEquity,stressBond,stressOverseas,stressCommodity]);
 
@@ -225,7 +227,7 @@ export default function PortfolioRiskResearch(){
       <label className="text-xs text-slate-600">海外资产情景：{stressOverseas}%<input type="range" min="-30" max="10" step="1" value={stressOverseas} onChange={e=>setStressOverseas(Number(e.target.value))} className="mt-3 w-full"/></label>
       <label className="text-xs text-slate-600">商品资产情景：{stressCommodity}%<input type="range" min="-30" max="10" step="1" value={stressCommodity} onChange={e=>setStressCommodity(Number(e.target.value))} className="mt-3 w-full"/></label>
      </div>
-     <div className="mt-5 rounded-xl bg-slate-900 p-4 text-white"><p className="text-[10px] text-slate-400">已识别股票与债券暴露的情景变化金额</p><p className={"mt-2 text-2xl font-semibold tabular-nums "+(stressLoss.total>=0?"text-rose-300":"text-emerald-300")}>{money(stressLoss.total)}</p><p className="mt-2 text-[10px] text-slate-400">海外与商品暴露当前未完整映射到可量化金额；不会用零敷衍，后续接入专属行情后再计入。</p></div>
+     <div className="mt-5 rounded-xl bg-slate-900 p-4 text-white"><p className="text-[10px] text-slate-400">已识别股票与债券暴露的情景变化金额</p><p className={"mt-2 text-2xl font-semibold tabular-nums "+(stressLoss.total>=0?"text-rose-300":"text-emerald-300")}>{money(stressLoss.total)}</p><p className="mt-2 text-[10px] text-slate-400">海外与商品情景按对应基金公开披露的可识别持仓权重测算；未披露部分不纳入计算。</p></div>
     </Card>
    </div>}
    {tab==="quality"&&<div className="space-y-5">
