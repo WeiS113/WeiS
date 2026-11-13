@@ -127,7 +127,8 @@ export default function PortfolioRiskResearch(){
   for(const row of rows){
    if(row.marketValue===null)continue;
    const profile=profileMap.get(row.code);if(!profile)continue;
-   for(const item of profile.disclosedHoldings||[]){
+   const disclosed=profile.disclosedHoldings?.length?profile.disclosedHoldings:(profile.underlyingEtf?[{code:profile.underlyingEtf.code,name:profile.underlyingEtf.name,weight:100,assetClass:"fund" as const,market:"unknown" as const}]:[]);
+   for(const item of disclosed){
     const key=item.assetClass+":"+item.code;
     const old=result.get(key);
     const amount=row.marketValue*item.weight/100;
@@ -143,7 +144,8 @@ export default function PortfolioRiskResearch(){
   for(const row of rows){
    if(row.marketValue===null)continue;
    const profile=profileMap.get(row.code);if(!profile)continue;
-   for(const item of profile.disclosedHoldings||[]){
+   const disclosed=profile.disclosedHoldings?.length?profile.disclosedHoldings:(profile.underlyingEtf?[{code:profile.underlyingEtf.code,name:profile.underlyingEtf.name,weight:100,assetClass:"fund" as const,market:"unknown" as const}]:[]);
+   for(const item of disclosed){
     const amount=row.marketValue*item.weight/100;
     if(profile.classification==="overseas")out.overseas+=amount;
     else if(profile.classification==="commodity")out.commodity+=amount;
@@ -161,7 +163,8 @@ export default function PortfolioRiskResearch(){
  const coverage=totalValue>0?weightedCoverage/totalValue*100:null;
  const portfolioHistory=useMemo(()=>{
   const validRows=rows.filter(x=>x.marketValue!==null&&histories[x.code]?.length>=20);
-  if(!validRows.length)return [];
+  const historyCoverage=validRows.reduce((sum,x)=>sum+(x.marketValue??0),0);
+  if(!validRows.length||totalValue<=0||historyCoverage/totalValue<0.7)return [];
   const weights=validRows.map(x=>({code:x.code,weight:x.marketValue!/validRows.reduce((s,y)=>s+(y.marketValue??0),0)}));
   const map=new Map<string,Map<string,number>>();
   for(const x of validRows)map.set(x.code,new Map(histories[x.code].map(p=>[p.date,p.close])));
@@ -174,7 +177,7 @@ export default function PortfolioRiskResearch(){
    index*=1+daily/weight;values.push({date:dates[i],value:index});
   }
   return values;
- },[rows,histories]);
+ },[rows,histories,totalValue]);
  const stats=useMemo(()=>riskStats(portfolioHistory),[portfolioHistory]);
  const totalKnown=classTotals.stock+classTotals.bond+classTotals.fund+classTotals.other;
  const stressLoss=useMemo(()=>{
@@ -224,7 +227,7 @@ export default function PortfolioRiskResearch(){
     </Card>
    </div>}
    {tab==="risk"&&<div className="space-y-5">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="组合年化波动率" value={stats?percent(stats.vol):"—"} note={stats?stats.observations+" 个共同净值观测点":"至少需要20个有效观测点"}/><Metric label="历史最大回撤" value={stats?percent(stats.maxDrawdown):"—"} note="基于当前持仓权重的历史净值序列"/><Metric label="历史区间收益" value={stats?percent(stats.total):"—"} note={stats?portfolioHistory[0].date+" 至 "+portfolioHistory.at(-1)?.date:"样本不足或净值日期不匹配"}/><Metric label="穿透HHI" value={concentration===null?"—":concentration.toFixed(0)} note="只覆盖已披露并成功映射的资产"/></div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="组合年化波动率" value={stats?percent(stats.vol):"—"} note={stats?stats.observations+" 个共同净值观测点":"至少需要20个有效观测点，且历史净值覆盖至少70%的组合市值"}/><Metric label="历史最大回撤" value={stats?percent(stats.maxDrawdown):"—"} note="基于当前持仓权重的历史净值序列"/><Metric label="历史区间收益" value={stats?percent(stats.total):"—"} note={stats?portfolioHistory[0].date+" 至 "+portfolioHistory.at(-1)?.date:"样本不足或净值日期不匹配"}/><Metric label="穿透HHI" value={concentration===null?"—":concentration.toFixed(0)} note="只覆盖已披露并成功映射的资产"/></div>
     <Card title="历史组合风险路径" sub="使用各基金官方历史单位净值，按当前持仓市值权重构造静态权重指数；不是账户真实历史收益曲线。">
      {portfolioHistory.length>2?<div><div className="flex h-48 items-end gap-[2px] rounded-xl bg-slate-50 p-3">{portfolioHistory.slice(-120).map((p,i,a)=>{const lo=Math.min(...a.map(x=>x.value)),hi=Math.max(...a.map(x=>x.value));return <div key={p.date} title={p.date+" · "+p.value.toFixed(2)} className="min-w-0 flex-1 rounded-t bg-slate-700/80" style={{height:(12+(p.value-lo)/(hi-lo||1)*88)+"%"}}/>})}</div><div className="mt-2 flex justify-between text-[10px] text-slate-400"><span>{portfolioHistory[Math.max(0,portfolioHistory.length-120)].date}</span><span>{portfolioHistory.at(-1)?.date}</span></div></div>:<Empty title="历史风险样本不足" sub="需要至少20个可匹配日期的官方净值数据。"/>}
     </Card>
