@@ -93,15 +93,16 @@ export default function PortfolioRiskResearch(){
   try{
    const [navRows,compositionBatches]=await Promise.all([
     Promise.all(codes.map(async code=>{try{const r=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"});if(!r.ok)return null;return await r.json() as FundQuote;}catch{return null;}})),
-    Promise.all(Array.from({length:Math.ceil(codes.length/30)},(_,i)=>codes.slice(i*30,(i+1)*30)).map(async batch=>{const r=await fetch("/api/finance/portfolio-lookthrough?codes="+batch.join(","),{cache:"no-store"});if(!r.ok)throw new Error("基金公开持仓穿透数据暂不可用");return await r.json() as Lookthrough;}))
+    Promise.all(Array.from({length:Math.ceil(codes.length/30)},(_,i)=>codes.slice(i*30,(i+1)*30)).map(async batch=>{const r=await fetch("/api/finance/portfolio-lookthrough?codes="+batch.join(","),{cache:"no-store"});if(!r.ok)throw new Error("基金公开持仓穿透数据暂不可用");return await r.json() as Lookthrough;})).catch(e=>{setError(e instanceof Error?e.message:"基金公开持仓穿透数据暂不可用");return [] as Lookthrough[];})
    ]);
    const nextQuotes:Record<string,FundQuote>={};for(const row of navRows)if(row?.code)nextQuotes[row.code]=row;setQuotes(nextQuotes);
    const profileRows=compositionBatches.flatMap(x=>x.profiles);
    const stockMap=new Map<string,StockRow>();
    for(const batch of compositionBatches)for(const item of batch.stocks){const old=stockMap.get(item.code);if(old){old.weight+=item.weight;old.fundCodes=[...new Set([...old.fundCodes,...item.fundCodes])];if(!old.quote&&item.quote)old.quote=item.quote;}else stockMap.set(item.code,item);}
    const composition:Lookthrough={asOf:new Date().toISOString(),profiles:profileRows,stocks:[...stockMap.values()].sort((a,b)=>b.weight-a.weight),source:"公开基金持仓披露 + 第三方证券行情",disclosureNote:"持仓来自最近可取得的公开定期报告，可能滞后于当前实际持仓；行情为证券行情，不构成基金实时净值估算。"};
-   setLookthrough(composition);
-   const historyRows=await Promise.all(codes.map(async code=>{try{const r=await fetch("/api/finance/fund-history?code="+code,{cache:"no-store"});if(!r.ok)return [code,[]] as const;const d=await r.json();return [code,Array.isArray(d.points)?d.points as HistoryPoint[]:[]] as const;}catch{return [code,[]] as const;} }));
+   setLookthrough(compositionBatches.length?composition:null);
+   const historyRows:([string,HistoryPoint[]])[]=[];
+   for(let i=0;i<codes.length;i+=5){const batch=await Promise.all(codes.slice(i,i+5).map(async code=>{try{const r=await fetch("/api/finance/fund-history?code="+code,{cache:"no-store"});if(!r.ok)return [code,[]] as [string,HistoryPoint[]];const d=await r.json();return [code,Array.isArray(d.points)?d.points as HistoryPoint[]:[]] as [string,HistoryPoint[]];}catch{return [code,[]] as [string,HistoryPoint[]];}}));historyRows.push(...batch);}
    setHistories(Object.fromEntries(historyRows));
    setRefreshed(new Date().toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false}));
   }catch(e){setError(e instanceof Error?e.message:"组合研究数据刷新失败");}
@@ -163,7 +164,8 @@ export default function PortfolioRiskResearch(){
  const concentration=exposureTotal>0?exposures.reduce((s,x)=>s+(x.marketValue/exposureTotal)**2,0)*10000:null;
  const weightedCoverage=rows.reduce((s,row)=>{
   const p=profileMap.get(row.code);if(row.marketValue===null||!p)return s;
-  return s+row.marketValue*Math.min(100,Math.max(0,p.disclosedWeight))/100;
+  const mapped=p.disclosedHoldings?.length?p.disclosedWeight:p.underlyingEtf?100:p.disclosedWeight;
+  return s+row.marketValue*Math.min(100,Math.max(0,mapped))/100;
  },0);
  const coverage=totalValue>0?weightedCoverage/totalValue*100:null;
  const portfolioHistory=useMemo(()=>{
@@ -248,7 +250,7 @@ export default function PortfolioRiskResearch(){
    </div>}
    {tab==="quality"&&<div className="space-y-5">
     <Card title="基金持仓披露质量" sub="每只基金独立展示持仓报告期、披露权重和数据缺口。">
-     <div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] text-slate-400"><th className="py-3 pr-3">基金</th><th className="px-3 py-3">资产类型</th><th className="px-3 py-3">披露日期</th><th className="px-3 py-3">已解析权重</th><th className="px-3 py-3">证券条目</th><th className="px-3 py-3">数据状态</th></tr></thead><tbody>{(lookthrough?.profiles||[]).map(item=>{const p=item.profile;return <tr key={item.code} className="border-b border-slate-50"><td className="py-3 pr-3"><div className="font-semibold">{names[item.code]||item.code}</div><div className="mt-1 text-[10px] text-slate-400">{item.code}</div></td><td className="px-3 py-3">{p?typeLabel(p.classification):"未识别"}</td><td className="px-3 py-3">{dateText(p?.holdingsAsOf)}</td><td className="px-3 py-3 tabular-nums">{p?percent(p.disclosedWeight):"—"}</td><td className="px-3 py-3">{p?.disclosedHoldings?.length??0}</td><td className="px-3 py-3">{p?<span className="text-emerald-700">已取得公开资料</span>:<span className="text-amber-700">{item.error||"暂不可用"}</span>}</td></tr>})}</tbody></table></div>
+     <div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] text-slate-400"><th className="py-3 pr-3">基金</th><th className="px-3 py-3">资产类型</th><th className="px-3 py-3">披露日期</th><th className="px-3 py-3">已解析权重</th><th className="px-3 py-3">证券条目</th><th className="px-3 py-3">数据状态</th></tr></thead><tbody>{(lookthrough?.profiles||[]).map(item=>{const p=item.profile;return <tr key={item.code} className="border-b border-slate-50"><td className="py-3 pr-3"><div className="font-semibold">{names[item.code]||item.code}</div><div className="mt-1 text-[10px] text-slate-400">{item.code}</div></td><td className="px-3 py-3">{p?typeLabel(p.classification):"未识别"}</td><td className="px-3 py-3">{dateText(p?.holdingsAsOf)}</td><td className="px-3 py-3 tabular-nums">{p?percent(p.disclosedHoldings?.length?p.disclosedWeight:p.underlyingEtf?100:p.disclosedWeight):"—"}</td><td className="px-3 py-3">{p?.disclosedHoldings?.length??0}</td><td className="px-3 py-3">{p?<span className="text-emerald-700">已取得公开资料</span>:<span className="text-amber-700">{item.error||"暂不可用"}</span>}</td></tr>})}</tbody></table></div>
     </Card>
     <Card title="模型边界与数据来源">
      <div className="grid gap-3 md:grid-cols-2">
