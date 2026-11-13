@@ -21,7 +21,7 @@ const tone=(n:number|null|undefined)=>n==null?"text-slate-400":n>=0?"text-rose-6
 const safeNumber=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
 
 export default function FinanceTerminal(){
- const [view,setView]=useState<View>("market");
+ const [view,setView]=useState<View>("portfolio");
  const [codes,setCodes]=useState<string[]>([]);
  const [names,setNames]=useState<Record<string,string>>({});
  const [holdings,setHoldings]=useState<Record<string,Holding>>({});
