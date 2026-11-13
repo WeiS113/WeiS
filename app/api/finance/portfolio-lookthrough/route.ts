@@ -8,7 +8,7 @@ type StockQuote = { code:string; name:string; price:number|null; change:number|n
 function marketFor(code:string){ return /^[569]/.test(code) ? 1 : 0; }
 function quoteTime(value:unknown):string|null{
  const raw=String(value??"");
- if(/^\\d{12,14}$/.test(raw)) return raw.slice(0,4)+"-"+raw.slice(4,6)+"-"+raw.slice(6,8)+" "+raw.slice(8,10)+":"+raw.slice(10,12);
+ if(/^\d{12,14}$/.test(raw)) return raw.slice(0,4)+"-"+raw.slice(4,6)+"-"+raw.slice(6,8)+" "+raw.slice(8,10)+":"+raw.slice(10,12);
  return null;
 }
 async function stockQuote(code:string):Promise<StockQuote>{
@@ -25,7 +25,7 @@ async function stockQuote(code:string):Promise<StockQuote>{
 }
 
 export async function GET(request:NextRequest){
- const codes=[...new Set((request.nextUrl.searchParams.get("codes")||"").split(",").map(x=>x.trim()).filter(x=>/^\\d{6}$/.test(x)))].slice(0,30);
+ const codes=[...new Set((request.nextUrl.searchParams.get("codes")||"").split(",").map(x=>x.trim()).filter(x=>/^\d{6}$/.test(x)))].slice(0,30);
  if(!codes.length)return NextResponse.json({error:"请提供有效基金代码"},{status:400});
  const profiles=await Promise.all(codes.map(async code=>{
   try{return {code,profile:await analyzeFundComposition(code),error:null};}
