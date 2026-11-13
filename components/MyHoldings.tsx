@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 
 type Holding = { quantity: number; cost: number };
@@ -21,7 +22,7 @@ function readLocal(): Portfolio {
     return { codes: Array.isArray(p?.codes) ? [...new Set(p.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x)))] : [], names: p?.names || {}, holdings: h || {} };
   } catch { return { codes: [], names: {}, holdings: {} }; }
 }
-function Panel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Panel({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-bold text-slate-900">{title}</h2>{hint && <p className="mt-1 mb-4 text-xs leading-5 text-slate-500">{hint}</p>}{children}</section>;
 }
 export default function MyHoldings() {
@@ -81,7 +82,7 @@ export default function MyHoldings() {
     setQuotes(next);
     setUpdated(new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }));
     setLoading(false);
-  }, [portfolio.codes.join(",")]);
+  }, [portfolio.codes]);
   useEffect(() => { if (ready) void refresh(); }, [ready, refresh]);
   const rows = useMemo(() => portfolio.codes.map(c => {
     const q = quotes[c]; const h = portfolio.holdings[c] || { quantity: 0, cost: 0 };
