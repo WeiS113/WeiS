@@ -120,7 +120,6 @@ export default function PortfolioRiskResearch(){
   return {code,name:names[code]||q?.name||code,quantity,cost,nav,navDate:q?.time??null,marketValue,costValue,pnl,daily,source:q?.source??"未取得正式净值"};
  }),[codes,quotes,holdings,names]);
  const totalValue=rows.reduce((s,x)=>s+(x.marketValue??0),0);
- const totalCost=rows.reduce((s,x)=>s+(x.costValue??0),0);
  const totalPnl=rows.reduce((s,x)=>s+(x.pnl??0),0);
  const totalDaily=rows.reduce((s,x)=>s+(x.daily??0),0);
  const dailyComplete=rows.length>0&&rows.every(x=>x.daily!==null);
@@ -186,7 +185,6 @@ export default function PortfolioRiskResearch(){
   return values;
  },[rows,histories,totalValue]);
  const stats=useMemo(()=>riskStats(portfolioHistory),[portfolioHistory]);
- const totalKnown=classTotals.stock+classTotals.bond+classTotals.fund+classTotals.other;
  const stressLoss=useMemo(()=>{
   const equity=classTotals.stock*stressEquity/100;
   const bonds=classTotals.bond*stressBond/100;
@@ -203,7 +201,7 @@ export default function PortfolioRiskResearch(){
    </div>
    <div className="grid gap-3 px-5 py-5 sm:grid-cols-2 sm:px-7 xl:grid-cols-4">
     <div><p className="text-[10px] text-slate-400">正式净值口径组合市值</p><p className="mt-2 text-2xl font-semibold tabular-nums">{priced?money(totalValue):"—"}</p><p className="mt-1 text-[10px] text-slate-400">{priced}/{codes.length} 只取得有效正式净值</p></div>
-    <div><p className="text-[10px] text-slate-400">累计持有盈亏</p><p className={"mt-2 text-2xl font-semibold tabular-nums "+(totalPnl>=0?"text-rose-300":"text-emerald-300")}>{hasCost?money(totalPnl):"—"}</p><p className="mt-1 text-[10px] text-slate-400">按已录入份额与单位成本计算</p></div>
+    <div><p className="text-[10px] text-slate-400">累计持有盈亏</p><p className={"mt-2 text-2xl font-semibold tabular-nums "+(totalPnl>=0?"text-rose-300":"text-emerald-300")}>{hasCost?money(totalPnl):"—"}</p><p className="mt-1 text-[10px] text-slate-400">已录入成本的 {hasCost}/{codes.length} 只基金；其余不计入</p></div>
     <div><p className="text-[10px] text-slate-400">当日正式净值盈亏</p><p className="mt-2 text-2xl font-semibold tabular-nums">{dailyComplete?money(totalDaily):"—"}</p><p className="mt-1 text-[10px] text-slate-400">{dailyComplete?"全部持仓已取得当日正式净值":"等待基金公司公布当日净值"}</p></div>
     <div><p className="text-[10px] text-slate-400">底层披露覆盖度</p><p className="mt-2 text-2xl font-semibold tabular-nums">{coverage===null?"—":percent(coverage)}</p><p className="mt-1 text-[10px] text-slate-400">按市值加权的公开披露资产覆盖，不等于实时持仓覆盖</p></div>
    </div>
