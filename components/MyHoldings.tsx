@@ -109,6 +109,7 @@ export default function MyHoldings() {
     if (!/^\d{6}$/.test(code)) { setNotice("请输入6位基金代码。"); return; }
     if (portfolio.codes.includes(code)) { setNotice("这只基金已在组合中。"); return; }
     const f = catalog.find(x => x.code === code);
+    try { const removed = JSON.parse(localStorage.getItem(RK) || "[]"); localStorage.setItem(RK, JSON.stringify(removed.filter((x: unknown) => x !== code))); } catch {}
     await persist({ ...portfolio, codes: [...portfolio.codes, code], names: { ...portfolio.names, ...(f ? { [code]: f.name } : {}) }, holdings: { ...portfolio.holdings, [code]: portfolio.holdings[code] || { quantity: 0, cost: 0 } } });
     setCode("");
   };
