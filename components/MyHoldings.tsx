@@ -18,7 +18,8 @@ function readLocal(): Portfolio {
   try {
     const p = JSON.parse(localStorage.getItem(PK) || "null");
     const h = JSON.parse(localStorage.getItem(HK) || "{}");
-    const removedRaw: unknown[] = JSON.parse(localStorage.getItem(RK) || "[]");
+    const removedParsed: unknown = JSON.parse(localStorage.getItem(RK) || "[]");
+    const removedRaw: unknown[] = Array.isArray(removedParsed) ? removedParsed : [];
     const removed = new Set<string>(removedRaw.filter((x): x is string => typeof x === "string"));
     const rawCodes: unknown[] = Array.isArray(p?.codes) ? p.codes : [];
     const validCodes = rawCodes.filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x));
