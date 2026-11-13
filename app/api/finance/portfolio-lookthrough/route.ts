@@ -9,6 +9,7 @@ function marketFor(code:string){ return /^[569]/.test(code) ? 1 : 0; }
 function quoteTime(value:unknown):string|null{
  const raw=String(value??"");
  if(/^\d{12,14}$/.test(raw)) return raw.slice(0,4)+"-"+raw.slice(4,6)+"-"+raw.slice(6,8)+" "+raw.slice(8,10)+":"+raw.slice(10,12);
+ if(/^\d{10}$/.test(raw)){const date=new Date(Number(raw)*1000);return Number.isNaN(date.getTime())?null:date.toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"});}
  return null;
 }
 async function stockQuote(code:string):Promise<StockQuote>{
