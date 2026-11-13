@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
+import ImportedLegacyHoldings from "./ImportedLegacyHoldings";
 
 type IndexQuote = { code:string; name:string; price:number|null; change:number|null; time:string|null };
 type FundEstimate = { code:string; name?:string; estimatedNav:number|null; change:number|null; time:string|null; source:string; confidence?:string; model?:string; diagnostic?:string; coverage?:number; analysis?:{classificationLabel?:string;benchmark?:string|null;strategy?:string|null;holdingsAsOf?:string|null;disclosedHoldings?:{name:string;weight:number;assetClass:string}[];notes?:string[];evidence?:string[]} };
@@ -212,6 +213,7 @@ export default function FinanceTerminal(){
      <Panel title="持仓市场表现" subtitle="基金估值时间与来源会因资产类型和市场交易时区而不同"><HoldingsTable rows={rows} onEdit={beginEdit} onRemove={remove} onSelect={openHistory}/></Panel>
     </div>}
     {view==="portfolio"&&<div className="space-y-5">
+     <ImportedLegacyHoldings/>
      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><Metric label="组合总市值" value={money(totalValue)} large/><Metric label="累计浮动盈亏" value={money(totalPnl)} color={totalPnl>=0?"up":"down"} large/><Metric label="今日估算盈亏" value={money(dailyPnl)} color={dailyPnl>=0?"up":"down"} large/><Metric label="已录入成本" value={money(totalCost)} large/></div>
      <Panel title="添加基金" subtitle="支持基金代码或名称检索"><div className="relative max-w-2xl"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="输入基金名称或代码，例如 005827" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-cyan-500"/>{searchBusy&&<span className="absolute right-3 top-3 text-xs text-slate-400">搜索中…</span>}{hits.length>0&&<div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">{hits.map(x=><button key={x.kind+x.code} onClick={()=>addFund(x)} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-slate-50"><span><b className="text-sm">{x.name}</b><small className="ml-2 text-xs text-slate-400">{x.code}</small></span><span className="text-xs text-cyan-700">加入组合 +</span></button>)}</div>}</div></Panel>
      <Panel title="持仓明细" subtitle={"已添加 "+codes.length+" 只基金 · 最近估值更新 "+(updated||"—")}><HoldingsTable rows={rows} onEdit={beginEdit} onRemove={remove} onSelect={openHistory}/></Panel>
