@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 
 type Holding = { quantity: number; cost: number };
 type Fund = { code: string; name: string; type: string };
-type Quote = { code: string; name: string; price: number | null; change: number | null; time: string | null; source?: string; dataType?: "盘中估算" | "正式净值"; confidence?: string };
+type Quote = { code: string; name: string; price: number | null; change: number | null; time: string | null; source?: string; dataType?: "盘中估算" | "正式净值"; confidence?: string; diagnostic?: string; model?: string; coverage?: number; sourceCount?: number };
 type Portfolio = { codes: string[]; names: Record<string, string>; holdings: Record<string, Holding> };
 const PK = "weis-finance-portfolio-v2";
 const HK = "weis-finance-holdings";
@@ -91,16 +91,29 @@ export default function MyHoldings() {
         try { return await response.json() as Quote; } catch { return null; }
       }));
       const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+      const dateOf = (value: unknown) => typeof value === "string" ? value.replaceAll("/", "-").slice(0, 10) : "";
       const next: Record<string, Quote> = {};
       portfolio.codes.forEach((c, index) => {
         const e = estimates.get(c);
-        const estimateDate = typeof e?.time === "string" ? e.time.replaceAll("/", "-").slice(0, 10) : "";
-        if (e && estimateDate === today && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0) {
-          next[c] = { code: c, name: e.name || official[index]?.name || c, price: Number(e.estimatedNav), change: e.change != null && Number.isFinite(Number(e.change)) ? Number(e.change) : null, time: e.time, source: e.source, dataType: "盘中估算", confidence: e.confidence };
-        } else if (official[index]?.price != null) {
-          next[c] = { ...official[index]!, dataType: "正式净值" };
-        } else if (e && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0) {
-          next[c] = { code: c, name: e.name || c, price: Number(e.estimatedNav), change: null, time: e.time, source: e.source, dataType: "盘中估算", confidence: e.confidence };
+        const officialQuote = official[index];
+        const officialIsToday = dateOf(officialQuote?.time) === today && officialQuote?.price != null;
+        const estimateIsToday = dateOf(e?.time) === today && e?.estimatedNav != null && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0 && e?.change != null && Number.isFinite(Number(e.change));
+        // Once the fund company has published today's official NAV, it takes precedence.
+        // Before that, use the fund-specific estimate engine and retain its evidence metadata.
+        if (officialIsToday) {
+          next[c] = { ...officialQuote!, dataType: "正式净值" };
+        } else if (estimateIsToday) {
+          next[c] = {
+            code: c, name: e.name || officialQuote?.name || c,
+            price: Number(e.estimatedNav), change: Number(e.change), time: e.time,
+            source: e.source, dataType: "盘中估算", confidence: e.confidence,
+            diagnostic: e.diagnostic, model: e.model, coverage: e.coverage, sourceCount: e.sourceCount
+          };
+        } else if (officialQuote?.price != null) {
+          next[c] = { ...officialQuote, dataType: "正式净值" };
+        } else if (e?.estimatedNav != null && Number.isFinite(Number(e.estimatedNav)) && Number(e.estimatedNav) > 0) {
+          // A dated estimate may be shown for diagnosis, but never label it as today's live estimate.
+          next[c] = { code: c, name: e.name || c, price: Number(e.estimatedNav), change: null, time: e.time, source: e.source, dataType: "正式净值", confidence: e.confidence, diagnostic: e.diagnostic };
         }
       });
       setQuotes(next);
@@ -119,9 +132,10 @@ export default function MyHoldings() {
     const marketValue = nav != null && quantity > 0 ? nav * quantity : null;
     const costValue = quantity > 0 && unitCost > 0 ? unitCost * quantity : null;
     const pnl = marketValue != null && costValue != null ? marketValue - costValue : null;
-    const daily = q?.change != null && q.time === new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }) && marketValue != null ? marketValue * q.change / 100 : null;
+    const quoteDate = q?.time?.replaceAll("/", "-").slice(0, 10);
+    const daily = q?.change != null && quoteDate === new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" }) && marketValue != null ? marketValue * q.change / 100 : null;
     const f = catalog.find(x => x.code === c);
-    return { code: c, name: portfolio.names[c] || q?.name || f?.name || c, type: f?.type || "", quantity, unitCost, nav, navDate: q?.time || "—", dataType: q?.dataType, marketValue, costValue, pnl, daily, change: q?.change ?? null };
+    return { code: c, name: portfolio.names[c] || q?.name || f?.name || c, type: f?.type || "", quantity, unitCost, nav, navDate: q?.time || "—", dataType: q?.dataType, source: q?.source, confidence: q?.confidence, diagnostic: q?.diagnostic, model: q?.model, coverage: q?.coverage, marketValue, costValue, pnl, daily, change: q?.change ?? null };
   }), [portfolio, quotes, catalog]);
   const value = rows.reduce((s, x) => s + (x.marketValue ?? 0), 0);
   const costTotal = rows.reduce((s, x) => s + (x.costValue ?? 0), 0);
@@ -174,9 +188,9 @@ export default function MyHoldings() {
       <div className="flex flex-wrap justify-between gap-2 border-t border-white/10 bg-white/[.035] px-5 py-3 text-[10px] text-slate-400 sm:px-7"><span>数据刷新：{updated || "等待首次刷新"}</span><span>交易时段每 60 秒更新盘中估算；非交易时段显示最近正式净值，估算不等于基金公司最终净值</span></div>
     </div>
     <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
-      <Panel title="持仓明细" hint="读取原组合数据。可编辑份额与单位成本，市值及盈亏根据最新可取得净值计算。">
-        {!ready ? <p className="py-12 text-center text-xs text-slate-400">正在恢复本机与云端持仓…</p> : rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] text-slate-400"><th className="py-3 pr-3">基金</th><th className="px-3 py-3">最新净值</th><th className="px-3 py-3">数据类型 / 日期</th><th className="px-3 py-3">持有份额</th><th className="px-3 py-3">单位成本</th><th className="px-3 py-3">持仓市值</th><th className="px-3 py-3">当日涨跌</th><th className="px-3 py-3">累计盈亏</th><th className="px-3 py-3">操作</th></tr></thead><tbody>{rows.map(x => <tr key={x.code} className="border-b border-slate-50"><td className="py-3 pr-3"><b className="text-slate-800">{x.name}</b><p className="mt-1 text-[10px] text-slate-400">{x.code} · {asset(x.type)}</p></td><td className="px-3 py-3 tabular-nums">{x.nav?.toFixed(4) ?? "—"}</td><td className="px-3 py-3 text-slate-500"><span className={x.dataType === "盘中估算" ? "font-semibold text-amber-600" : "text-emerald-700"}>{x.dataType || "暂无数据"}</span><p className="mt-1 text-[10px]">{x.navDate}</p></td><td className="px-3 py-3"><input aria-label={x.name + "持有份额"} type="number" min="0" step="0.0001" value={qty[x.code] ?? String(x.quantity)} onChange={e => setQty(old => ({ ...old, [x.code]: e.target.value }))} className="w-28 rounded-lg border border-slate-200 px-2 py-1.5" /></td><td className="px-3 py-3"><input aria-label={x.name + "单位成本"} type="number" min="0" step="0.0001" value={cost[x.code] ?? String(x.unitCost)} onChange={e => setCost(old => ({ ...old, [x.code]: e.target.value }))} className="w-24 rounded-lg border border-slate-200 px-2 py-1.5" /></td><td className="px-3 py-3 font-semibold tabular-nums">{money(x.marketValue)}</td><td className={"px-3 py-3 font-semibold " + tone(x.change)}>{percent(x.change)}</td><td className={"px-3 py-3 font-semibold tabular-nums " + tone(x.pnl)}>{money(x.pnl)}</td><td className="px-3 py-3"><div className="flex gap-2"><button onClick={() => void saveRow(x.code)} disabled={busy} className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[10px] text-white disabled:opacity-50">保存</button><button onClick={() => void removeFund(x.code)} disabled={busy} className="rounded-md border px-2 py-1.5 text-[10px] text-slate-500 disabled:opacity-50">移除</button></div></td></tr>)}</tbody></table></div> : <div className="rounded-xl border border-dashed border-slate-200 px-5 py-12 text-center"><b className="text-sm text-slate-700">还没有基金持仓</b><p className="mt-2 text-xs text-slate-500">可从基金发现加入，或在右侧输入代码添加。</p></div>}
-        <p className="mt-3 text-[10px] leading-5 text-slate-400">单位成本按每份成本录入。未填写份额或成本时，相关市值/盈亏显示为“—”，不按零值补齐。</p>
+      <Panel title="持仓明细" hint="读取原组合数据。可编辑份额与单位成本，市值及盈亏优先采用当日估值；基金公司公布当日正式净值后自动切换。">
+        {!ready ? <p className="py-12 text-center text-xs text-slate-400">正在恢复本机与云端持仓…</p> : rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] text-slate-400"><th className="py-3 pr-3">基金</th><th className="px-3 py-3">最新净值</th><th className="px-3 py-3">估值类型 / 日期</th><th className="px-3 py-3">持有份额</th><th className="px-3 py-3">单位成本</th><th className="px-3 py-3">持仓市值</th><th className="px-3 py-3">当日涨跌</th><th className="px-3 py-3">累计盈亏</th><th className="px-3 py-3">操作</th></tr></thead><tbody>{rows.map(x => <tr key={x.code} className="border-b border-slate-50"><td className="py-3 pr-3"><b className="text-slate-800">{x.name}</b><p className="mt-1 text-[10px] text-slate-400">{x.code} · {asset(x.type)}</p></td><td className="px-3 py-3 tabular-nums">{x.nav?.toFixed(4) ?? "—"}</td><td className="px-3 py-3 text-slate-500"><span className={x.dataType === "盘中估算" ? "font-semibold text-amber-600" : "text-emerald-700"}>{x.dataType || "暂无数据"}</span><p className="mt-1 text-[10px]">{x.navDate}</p>{x.dataType === "盘中估算" && <p className="mt-1 max-w-[180px] text-[10px] text-slate-400">{x.confidence ? "置信度 " + x.confidence : ""}{x.coverage != null ? " · 覆盖 " + x.coverage + "%" : ""}</p>}</td><td className="px-3 py-3"><input aria-label={x.name + "持有份额"} type="number" min="0" step="0.0001" value={qty[x.code] ?? String(x.quantity)} onChange={e => setQty(old => ({ ...old, [x.code]: e.target.value }))} className="w-28 rounded-lg border border-slate-200 px-2 py-1.5" /></td><td className="px-3 py-3"><input aria-label={x.name + "单位成本"} type="number" min="0" step="0.0001" value={cost[x.code] ?? String(x.unitCost)} onChange={e => setCost(old => ({ ...old, [x.code]: e.target.value }))} className="w-24 rounded-lg border border-slate-200 px-2 py-1.5" /></td><td className="px-3 py-3 font-semibold tabular-nums">{money(x.marketValue)}</td><td className={"px-3 py-3 font-semibold " + tone(x.change)}>{percent(x.change)}</td><td className={"px-3 py-3 font-semibold tabular-nums " + tone(x.pnl)}>{money(x.pnl)}</td><td className="px-3 py-3"><div className="flex gap-2"><button onClick={() => void saveRow(x.code)} disabled={busy} className="rounded-md bg-slate-900 px-2.5 py-1.5 text-[10px] text-white disabled:opacity-50">保存</button><button onClick={() => void removeFund(x.code)} disabled={busy} className="rounded-md border px-2 py-1.5 text-[10px] text-slate-500 disabled:opacity-50">移除</button></div></td></tr>)}</tbody></table></div> : <div className="rounded-xl border border-dashed border-slate-200 px-5 py-12 text-center"><b className="text-sm text-slate-700">还没有基金持仓</b><p className="mt-2 text-xs text-slate-500">可从基金发现加入，或在右侧输入代码添加。</p></div>}
+        <p className="mt-3 text-[10px] leading-5 text-slate-400">单位成本按每份成本录入。盘中估值为模型测算，受定期报告持仓滞后、资产覆盖率及行情源延迟影响；未填写份额或成本时，相关市值/盈亏显示为“—”。</p>
       </Panel>
       <div className="space-y-5">
         <Panel title="添加基金" hint="输入6位基金代码；基金目录中存在匹配记录时自动带入名称。">
