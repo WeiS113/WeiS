@@ -91,12 +91,17 @@ export default function PortfolioRiskResearch(){
   if(!codes.length){setQuotes({});setLookthrough(null);setHistories({});return;}
   setBusy(true);setError("");
   try{
-   const [navRows,composition]=await Promise.all([
+   const [navRows,compositionBatches]=await Promise.all([
     Promise.all(codes.map(async code=>{try{const r=await fetch("/api/finance/quote?kind=fund&code="+code,{cache:"no-store"});if(!r.ok)return null;return await r.json() as FundQuote;}catch{return null;}})),
-    fetch("/api/finance/portfolio-lookthrough?codes="+codes.join(","),{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error("基金公开持仓穿透数据暂不可用");return await r.json() as Lookthrough;})
+    Promise.all(Array.from({length:Math.ceil(codes.length/30)},(_,i)=>codes.slice(i*30,(i+1)*30)).map(async batch=>{const r=await fetch("/api/finance/portfolio-lookthrough?codes="+batch.join(","),{cache:"no-store"});if(!r.ok)throw new Error("基金公开持仓穿透数据暂不可用");return await r.json() as Lookthrough;}))
    ]);
-   const nextQuotes:Record<string,FundQuote>={};for(const row of navRows)if(row?.code)nextQuotes[row.code]=row;setQuotes(nextQuotes);setLookthrough(composition);
-   const historyRows=await Promise.all(codes.slice(0,20).map(async code=>{try{const r=await fetch("/api/finance/fund-history?code="+code,{cache:"no-store"});if(!r.ok)return [code,[]] as const;const d=await r.json();return [code,Array.isArray(d.points)?d.points as HistoryPoint[]:[]] as const;}catch{return [code,[]] as const;}}));
+   const nextQuotes:Record<string,FundQuote>={};for(const row of navRows)if(row?.code)nextQuotes[row.code]=row;setQuotes(nextQuotes);
+   const profileRows=compositionBatches.flatMap(x=>x.profiles);
+   const stockMap=new Map<string,StockRow>();
+   for(const batch of compositionBatches)for(const item of batch.stocks){const old=stockMap.get(item.code);if(old){old.weight+=item.weight;old.fundCodes=[...new Set([...old.fundCodes,...item.fundCodes])];if(!old.quote&&item.quote)old.quote=item.quote;}else stockMap.set(item.code,item);}
+   const composition:Lookthrough={asOf:new Date().toISOString(),profiles:profileRows,stocks:[...stockMap.values()].sort((a,b)=>b.weight-a.weight),source:"公开基金持仓披露 + 第三方证券行情",disclosureNote:"持仓来自最近可取得的公开定期报告，可能滞后于当前实际持仓；行情为证券行情，不构成基金实时净值估算。"};
+   setLookthrough(composition);
+   const historyRows=await Promise.all(codes.map(async code=>{try{const r=await fetch("/api/finance/fund-history?code="+code,{cache:"no-store"});if(!r.ok)return [code,[]] as const;const d=await r.json();return [code,Array.isArray(d.points)?d.points as HistoryPoint[]:[]] as const;}catch{return [code,[]] as const;} }));
    setHistories(Object.fromEntries(historyRows));
    setRefreshed(new Date().toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false}));
   }catch(e){setError(e instanceof Error?e.message:"组合研究数据刷新失败");}
