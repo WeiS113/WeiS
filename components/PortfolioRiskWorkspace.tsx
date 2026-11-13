@@ -99,7 +99,7 @@ export default function PortfolioRiskWorkspace(){
   try{const g=JSON.parse(localStorage.getItem(FUND_GROUPS_KEY)||"{}");setFundGroups(g&&typeof g==="object"&&!Array.isArray(g)?g:{});}catch{}
   setReady(true);
  },[]);
- useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));},[ready,codes,names]);
+ useEffect(()=>{if(!ready)return;localStorage.setItem(PORTFOLIO_KEY,JSON.stringify({codes,names}));window.dispatchEvent(new Event("weis:portfolio-updated"));},[ready,codes,names]);
  useEffect(()=>{if(ready)localStorage.setItem(HOLDINGS_KEY,JSON.stringify(holdings));},[ready,holdings]);
  useEffect(()=>{if(ready){localStorage.setItem(GROUPS_KEY,JSON.stringify(groups));localStorage.setItem(FUND_GROUPS_KEY,JSON.stringify(fundGroups));}},[ready,groups,fundGroups]);
  useEffect(()=>{if(ready)localStorage.setItem(CURVES_KEY,JSON.stringify(curves));},[ready,curves]);
