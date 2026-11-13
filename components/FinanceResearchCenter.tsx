@@ -62,7 +62,7 @@ function Stat({label,value,note}:{label:string;value:string;note?:string}){retur
 function Table({heads,children}:{heads:string[];children:React.ReactNode}){return <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-xs"><thead><tr className="border-b border-slate-100 text-[10px] text-slate-400">{heads.map(h=><th key={h} className="px-3 py-3 font-medium">{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>}
 function Line({points}:{points:Point[]}){if(points.length<2)return <div className="grid h-56 place-items-center text-sm text-slate-400">暂无足够历史净值</div>;const vals=points.map(p=>p.close);const lo=Math.min(...vals),hi=Math.max(...vals);const path=points.map((p,i)=>`${i?"L":"M"}${i/(points.length-1)*760} ${190-(p.close-lo)/(hi-lo||1)*160}`).join(" ");return <div><svg viewBox="0 0 760 210" className="h-56 w-full" preserveAspectRatio="none"><path d={path} fill="none" stroke="#0891b2" strokeWidth="2.5" vectorEffect="non-scaling-stroke"/><path d={path+" L760 210 L0 210 Z"} fill="#06b6d4" opacity=".08"/></svg><div className="flex justify-between text-[10px] text-slate-400"><span>{points[0].date}</span><span>{points.at(-1)?.date}</span></div></div>}
 export default function FinanceResearchCenter(){
- const [section,setSection]=useState<Section>("market");
+ const [section,setSection]=useState<Section>("holdings");
  const [indices,setIndices]=useState<Quote[]>([]);
  const [funds,setFunds]=useState<Fund[]>([]);
  const [boards,setBoards]=useState<Board[]>([]);
