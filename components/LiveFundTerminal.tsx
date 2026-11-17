@@ -28,7 +28,8 @@ function globalSession(symbol:string):SessionInfo{
  if(symbol==="^TNX")return {label:"美国国债收益率参考",open:"随美债市场",close:"非交易所连续报价",note:"此为收益率行情指标，不是可直接买卖的单一证券"};
  return {label:"境内市场参考",open:"09:30",close:"15:00",note:"交易时段可能因品种和节假日调整"};
 }
-\nconst periods=[["week","近1周"],["month","近1月"],["quarter","近3月"],["half","近6月"],["year","近1年"]] as const;
+
+const periods=[["week","近1周"],["month","近1月"],["quarter","近3月"],["half","近6月"],["year","近1年"]] as const;
 const tone=(v:number|null|undefined)=>v==null?"text-slate-500":v>=0?"text-rose-600":"text-emerald-600";
 const pct=(v:number|null|undefined)=>v==null?"—":(v>0?"+":"")+v.toFixed(2)+"%";
 const num=(v:number|null|undefined,d=4)=>v==null?"—":v.toFixed(d);
