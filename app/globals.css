@@ -140,7 +140,10 @@ a {
   }
 
   .ios-tab-item.is-active {
-    color: var(--ios-blue);
+    color: #ffffff;
+    background: #c45b68;
+    border-radius: 12px;
+    margin: 4px 3px;
   }
 
   .ios-tab-icon {
