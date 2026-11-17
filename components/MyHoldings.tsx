@@ -50,8 +50,9 @@ const tone = (n: number | null) => n == null ? "text-slate-400" : n >= 0 ? "text
 const asset = (t = "") => /货币/.test(t) ? "货币基金" : /债券/.test(t) ? "债券基金" : /QDII|海外/.test(t) ? "海外基金" : /商品|黄金/.test(t) ? "商品基金" : /指数|ETF|联接/.test(t) ? "指数基金" : /股票/.test(t) ? "股票基金" : /混合/.test(t) ? "混合基金" : "其他";
 function readLocal(): Portfolio {
   try {
-    const p = JSON.parse(localStorage.getItem(PK) || "null");
-    const h = JSON.parse(localStorage.getItem(HK) || "{}");
+    const backup = JSON.parse(localStorage.getItem(BK) || "null");
+    const p = JSON.parse(localStorage.getItem(PK) || "null") || backup;
+    const h = JSON.parse(localStorage.getItem(HK) || "null") || backup?.holdings || {};
     const removedParsed: unknown = JSON.parse(localStorage.getItem(RK) || "[]");
     const removedRaw: unknown[] = Array.isArray(removedParsed) ? removedParsed : [];
     const removed = new Set<string>(removedRaw.filter((x): x is string => typeof x === "string"));
@@ -101,7 +102,14 @@ export default function MyHoldings() {
     void supabase.auth.getUser().then(async ({ data, error }) => {
       if (cancelled || error || !data.user) return;
       const { data: remote, error: readError } = await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id", data.user.id).maybeSingle();
-      if (cancelled || readError || !remote) return;
+      if (cancelled || readError) return;
+      if (!remote) {
+        // First cloud login: seed the empty cloud row from existing local holdings.
+        if (local.codes.length) {
+          await supabase.from("finance_portfolios").upsert({ user_id: data.user.id, codes: local.codes, names: local.names, holdings: local.holdings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+        }
+        return;
+      }
       const cloud = validPortfolio(remote);
       const currentLocal = readLocal();
       const merged = mergePortfolios(currentLocal, cloud);
