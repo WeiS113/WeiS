@@ -175,15 +175,21 @@ export default function FinanceResearchCenter(){
 .finance-terminal input::placeholder{color:#64748b!important}
 .finance-terminal .bg-white{background:#101b2b!important}
 .finance-terminal .bg-slate-50{background:#111f31!important}
-.finance-terminal .border-slate-100,.finance-terminal .border-slate-200{border-color:#26364c!important}
+.finance-terminal .border-slate-50,.finance-terminal .border-slate-100,.finance-terminal .border-slate-200{border-color:#26364c!important}
 .finance-terminal .text-slate-800,.finance-terminal .text-slate-900{color:#e2e8f0!important}
 .finance-terminal .text-slate-700{color:#cbd5e1!important}
+.finance-terminal .text-slate-300{color:#cbd5e1!important}
+.finance-terminal .text-slate-200{color:#e2e8f0!important}
 .finance-terminal .text-slate-600{color:#94a3b8!important}
 .finance-terminal .text-slate-500{color:#94a3b8!important}
 .finance-terminal .text-slate-400{color:#64748b!important}
 .finance-terminal .bg-rose-50{background:rgba(225,29,72,.13)!important}
 .finance-terminal .bg-emerald-50{background:rgba(16,185,129,.12)!important}
 .finance-terminal .bg-cyan-50{background:rgba(6,182,212,.12)!important}
+.finance-terminal button{transition:background-color .15s ease,border-color .15s ease,color .15s ease}
 .finance-terminal button:disabled{opacity:.35}
+.finance-terminal table tbody tr{border-bottom:1px solid #26364c!important}
+.finance-terminal table tbody td{color:#cbd5e1}
+.finance-terminal a{transition:color .15s ease}
 `}</style><footer className="mt-8 flex flex-wrap justify-between gap-3 border-t border-slate-800 pt-5 text-[10px] text-slate-600"><span>FUNDPULSE RESEARCH TERMINAL · 信息研究用途，不构成投资建议</span><span>公开数据可能延迟；净值、估值、披露持仓与模型结果严格区分。</span></footer></div></section></div></main>;
 }
