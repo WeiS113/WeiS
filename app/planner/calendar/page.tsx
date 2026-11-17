@@ -911,7 +911,7 @@ export default function CalendarPage() {
                           }}
                           className={`min-h-[120px] rounded-2xl border p-3 transition ${
                             isSelected
-                              ? "border-black bg-gray-100"
+                              ? "border-[#c45b68] bg-[#c45b68] text-white"
                               : "border-gray-200 bg-white hover:bg-gray-50"
                           }`}
                         >
@@ -920,7 +920,9 @@ export default function CalendarPage() {
 
                             <div
                               className={`flex h-10 w-10 items-center justify-center rounded-full text-lg font-semibold ${
-                                isToday
+                                isSelected
+                                  ? "bg-white/20 text-white"
+                                  : isToday
                                   ? "bg-black text-white"
                                   : isPast
                                   ? "text-gray-400"
