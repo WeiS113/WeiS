@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
                 const date=new Date(last.x!).toLocaleDateString("sv-SE",{timeZone:"Asia/Shanghai"});
                 const named=raw.match(/(?:var\s+)?fS_name\s*=\s*["']([^"']+)["']/);
                 result={code,name:String(data?.SHORTNAME||named?.[1]||code),kind,price:Number(last.y),change:num(last.equityReturn),time:date,source:"最新公布净值（公开净值历史备用源）"};
-                return NextResponse.json(result,{headers:{"Cache-Control":"no-store"}});
+                return NextResponse.json(result,{headers:{"Cache-Control":"public, s-maxage=30, stale-while-revalidate=90"}});
               }
             }
           }
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       result = { code, name: String(data.f58 || code), kind, price: num(data.f43) !== null && num(data.f43)! > 0 ? num(data.f43) : null, change: num(data.f170), time: quoteTime(data.f86), source: "第三方行情（可能延迟）" };
     }
     if (result.price === null) throw new Error("Invalid or missing price");
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(result, { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=90" } });
   } catch {
     return NextResponse.json({ error: "行情暂不可用，请稍后重试" }, { status: 502 });
   }
