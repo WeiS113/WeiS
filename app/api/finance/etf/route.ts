@@ -14,5 +14,5 @@ export async function GET(){
    return {code,name:String(d.f58||name),price:num(d.f43),change:num(d.f170),volume:num(d.f47),amount:num(d.f48),turnover:num(d.f168),time:d.f86?String(d.f86):null};
   }catch{return {code,name,price:null,change:null,volume:null,amount:null,turnover:null,time:null};}
  }));
- return NextResponse.json({etfs,source:"Eastmoney public ETF quotes; may be delayed",refreshedAt:new Date().toISOString()},{headers:{"Cache-Control":"no-store"}});
+ return NextResponse.json({etfs,source:"Eastmoney public ETF quotes; may be delayed",refreshedAt:new Date().toISOString()},{headers:{"Cache-Control":"public, s-maxage=15, stale-while-revalidate=60"}});
 }
