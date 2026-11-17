@@ -9,6 +9,6 @@ export async function GET(){
   const data=(await r.json())?.data;
   const rows=Array.isArray(data?.diff)?data.diff:Object.values(data?.diff??{});
   const boards=rows.map((x:any)=>({code:String(x.f12??""),name:String(x.f14??""),price:num(x.f2),change:num(x.f3),amount:num(x.f6)})).filter((x:any)=>x.code&&x.name);
-  return NextResponse.json({boards,source:"Eastmoney industry board quotes",refreshedAt:new Date().toISOString()},{headers:{"Cache-Control":"no-store"}});
+  return NextResponse.json({boards,source:"Eastmoney industry board quotes",refreshedAt:new Date().toISOString()},{headers:{"Cache-Control":"public, s-maxage=15, stale-while-revalidate=60"}});
  }catch{return NextResponse.json({boards:[],error:"行业板块行情暂不可用。"},{status:502});}
 }
