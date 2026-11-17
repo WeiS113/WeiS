@@ -143,5 +143,5 @@ export async function GET(request:NextRequest){
  }
  const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
  if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"public, s-maxage=20, stale-while-revalidate=60"}});
- return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
+ return NextResponse.json({estimates:results},{headers:{"Cache-Control":"public, s-maxage=20, stale-while-revalidate=60"}});
 }
