@@ -10,6 +10,40 @@ type Portfolio = { codes: string[]; names: Record<string, string>; holdings: Rec
 const PK = "weis-finance-portfolio-v2";
 const HK = "weis-finance-holdings";
 const RK = "weis-finance-removed-codes-v1";
+const BK = "weis-finance-portfolio-backup-v1";
+function validPortfolio(value: any): Portfolio {
+  const rawCodes: unknown[] = Array.isArray(value?.codes) ? value.codes : [];
+  const codes = [...new Set(rawCodes.filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x)))];
+  const names = value?.names && typeof value.names === "object" ? value.names as Record<string, string> : {};
+  const rawHoldings = value?.holdings && typeof value.holdings === "object" ? value.holdings as Record<string, any> : {};
+  const holdings: Record<string, Holding> = {};
+  for (const code of codes) {
+    const row = rawHoldings[code];
+    if (row && Number.isFinite(Number(row.quantity)) && Number.isFinite(Number(row.cost))) {
+      holdings[code] = { quantity: Math.max(0, Number(row.quantity)), cost: Math.max(0, Number(row.cost)) };
+    }
+  }
+  return { codes, names, holdings };
+}
+function mergePortfolios(local: Portfolio, remote: Portfolio): Portfolio {
+  let removed: string[] = [];
+  try { const value = JSON.parse(localStorage.getItem(RK) || "[]"); if (Array.isArray(value)) removed = value.filter((x): x is string => typeof x === "string"); } catch {}
+  const tombstones = new Set(removed);
+  const codes = [...new Set([...local.codes, ...remote.codes])].filter(code => !tombstones.has(code));
+  const names = { ...remote.names, ...local.names };
+  const holdings: Record<string, Holding> = {};
+  for (const code of codes) {
+    const preferred = local.holdings[code] || remote.holdings[code];
+    if (preferred) holdings[code] = preferred;
+  }
+  return { codes, names, holdings };
+}
+function saveLocalSnapshot(value: Portfolio) {
+  const snapshot = validPortfolio(value);
+  localStorage.setItem(BK, JSON.stringify({ ...snapshot, savedAt: new Date().toISOString() }));
+  localStorage.setItem(PK, JSON.stringify({ codes: snapshot.codes, names: snapshot.names }));
+  localStorage.setItem(HK, JSON.stringify(snapshot.holdings));
+}
 const money = (n: number | null) => n == null || !Number.isFinite(n) ? "—" : "¥" + n.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const percent = (n: number | null) => n == null || !Number.isFinite(n) ? "—" : (n > 0 ? "+" : "") + n.toFixed(2) + "%";
 const tone = (n: number | null) => n == null ? "text-slate-400" : n >= 0 ? "text-rose-600" : "text-emerald-600";
@@ -44,8 +78,8 @@ export default function MyHoldings() {
   const persist = useCallback(async (next: Portfolio) => {
     setBusy(true);
     try {
-      localStorage.setItem(PK, JSON.stringify({ codes: next.codes, names: next.names }));
-      localStorage.setItem(HK, JSON.stringify(next.holdings));
+      // Keep a recoverable snapshot before every write; the browser copy is never discarded silently.
+      saveLocalSnapshot(next);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { error } = await supabase.from("finance_portfolios").upsert({ user_id: user.id, codes: next.codes, names: next.names, holdings: next.holdings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
@@ -59,15 +93,24 @@ export default function MyHoldings() {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    setPortfolio(readLocal());
+    const local = readLocal();
+    setPortfolio(local);
+    // Preserve a pre-sync recovery point, then merge local + cloud. Never replace a populated
+    // browser portfolio with an empty or stale cloud row during initialization.
+    try { if (local.codes.length) saveLocalSnapshot(local); } catch {}
     void supabase.auth.getUser().then(async ({ data, error }) => {
       if (cancelled || error || !data.user) return;
       const { data: remote, error: readError } = await supabase.from("finance_portfolios").select("codes,names,holdings").eq("user_id", data.user.id).maybeSingle();
       if (cancelled || readError || !remote) return;
-      const next: Portfolio = { codes: Array.isArray(remote.codes) ? remote.codes.filter((x: unknown): x is string => typeof x === "string" && /^\d{6}$/.test(x)) : [], names: remote.names || {}, holdings: remote.holdings || {} };
-      setPortfolio(next);
-      localStorage.setItem(PK, JSON.stringify({ codes: next.codes, names: next.names }));
-      localStorage.setItem(HK, JSON.stringify(next.holdings));
+      const cloud = validPortfolio(remote);
+      const currentLocal = readLocal();
+      const merged = mergePortfolios(currentLocal, cloud);
+      if (cancelled) return;
+      saveLocalSnapshot(merged);
+      setPortfolio(merged);
+      // Reconcile the merged result to cloud so both devices retain the union of holdings.
+      const same = JSON.stringify(merged.codes) === JSON.stringify(cloud.codes) && JSON.stringify(merged.names) === JSON.stringify(cloud.names) && JSON.stringify(merged.holdings) === JSON.stringify(cloud.holdings);
+      if (!same) await supabase.from("finance_portfolios").upsert({ user_id: data.user.id, codes: merged.codes, names: merged.names, holdings: merged.holdings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     }).finally(() => { if (!cancelled) setReady(true); });
     void fetch("/api/finance/catalog", { cache: "no-store" }).then(r => r.json()).then(d => { if (!cancelled) setCatalog(d.funds || []); }).catch(() => {});
     const sync = () => setPortfolio(readLocal());
