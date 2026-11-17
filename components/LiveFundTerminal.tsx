@@ -20,6 +20,8 @@ export default function LiveFundTerminal(){
  const [period,setPeriod]=useState<string>("year");
  const [tab,setTab]=useState<Tab>("all");
  const [query,setQuery]=useState("");
+ const [page,setPage]=useState(1);
+ const [hasNext,setHasNext]=useState(false);
  const [busy,setBusy]=useState(false);
  const [updated,setUpdated]=useState<string|null>(null);
  const [error,setError]=useState("");
@@ -30,7 +32,7 @@ export default function LiveFundTerminal(){
    const [ir,er,fr]=await Promise.all([
     fetch("/api/finance/indices",{cache:"no-store"}),
     fetch("/api/finance/etf",{cache:"no-store"}),
-    fetch("/api/finance/fund-ranking?period="+period+"&page=1&pageSize=50",{cache:"no-store"})
+    fetch("/api/finance/fund-ranking?period="+period+"&page="+page+"&pageSize=50",{cache:"no-store"})
    ]);
    const [id,ed,fd]=await Promise.all([ir.json(),er.json(),fr.json()]);
    if(ir.ok)setIndices(id.indices||[]);
@@ -38,6 +40,7 @@ export default function LiveFundTerminal(){
    if(!fr.ok)throw new Error(fd.error||"基金行情列表暂不可用");
    const rows=(fd.funds||[]) as FundRow[];
    setFunds(rows);
+   setHasNext(rows.length===50);
    const codes=rows.map(x=>x.code);
    if(codes.length){
     const xr=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store"});
@@ -45,11 +48,13 @@ export default function LiveFundTerminal(){
     const next:Record<string,Estimate>={};
     for(const x of xd.estimates||[])next[x.code]=x;
     setEstimates(next);
+   } else {
+    setEstimates({});
    }
    setUpdated(new Date().toISOString());setLastError("");
   }catch(e){const message=e instanceof Error?e.message:"行情加载失败";setError(message);setLastError(message);}
   finally{setBusy(false);}
- },[period]);
+ },[period,page]);
  useEffect(()=>{void refresh();const id=window.setInterval(()=>void refresh(),60000);return()=>window.clearInterval(id);},[refresh]);
  const visible=useMemo(()=>{
   const q=query.trim().toLowerCase();
@@ -60,7 +65,7 @@ export default function LiveFundTerminal(){
    const text=(f.name+" "+(e?.analysis?.classificationLabel||"")).toLowerCase();
    const kind=tab==="all"||(tab==="equity"&&/股票|混合/.test(text))||(tab==="index"&&/指数|联接|ETF/.test(text))||(tab==="bond"&&/债券/.test(text))||(tab==="overseas"&&/qdii|海外|港股|美股/.test(text))||(tab==="gold"&&/黄金|商品|贵金属/.test(text));
    return match&&kind;
-  }).map(f=>({fund:f,estimate:estimates[f.code]})).sort((a,b)=>(b.estimate?.change??b.fund.daily??-999)-(a.estimate?.change??a.fund.daily??-999));
+  }).map(f=>({fund:f,estimate:estimates[f.code]}));
  },[funds,estimates,query,tab]);
  const leaders=useMemo(()=>[...etfs].filter(x=>x.change!==null).sort((a,b)=>(b.change??-999)-(a.change??-999)).slice(0,6),[etfs]);
  return <div className="space-y-4">
@@ -79,11 +84,11 @@ export default function LiveFundTerminal(){
   <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0f1a2b] shadow-[0_8px_30px_rgba(0,0,0,.18)]">
    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
     <div><h2 className="text-base font-bold text-slate-100">基金实时行情 / 盘中估值</h2><p className="mt-1 text-[11px] text-slate-500">估值优先使用当日有效来源；无有效估值时保留最近正式净值和历史涨跌，不将旧数据冒充实时数据</p></div>
-    <div className="flex flex-wrap gap-1">{periods.map(([v,label])=><button key={v} onClick={()=>setPeriod(v)} className={"rounded-lg px-3 py-2 text-[11px] font-semibold "+(period===v?"bg-rose-600 text-white":"bg-slate-100 text-slate-500")}>{label}排行</button>)}</div>
+    <div className="flex flex-wrap gap-1">{periods.map(([v,label])=><button key={v} onClick={()=>{setPeriod(v);setPage(1);}} className={"rounded-lg px-3 py-2 text-[11px] font-semibold "+(period===v?"bg-rose-600 text-white":"bg-slate-100 text-slate-500")}>{label}排行</button>)}</div>
    </div>
    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
     <div className="flex flex-wrap gap-1">{([["all","全部"],["equity","股票/混合"],["index","指数/ETF"],["bond","债券"],["overseas","海外/QDII"],["gold","黄金/商品"]] as [Tab,string][]).map(([v,label])=><button key={v} onClick={()=>setTab(v)} className={"rounded-full px-3 py-1.5 text-[11px] "+(tab===v?"bg-rose-50 font-semibold text-rose-700":"text-slate-500 hover:bg-slate-100")}>{label}</button>)}</div>
-    <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索基金名称 / 代码" className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs sm:w-56"/>
+    <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索当前页基金名称 / 代码" className="w-full rounded-lg border border-slate-700 px-3 py-2 text-xs sm:w-56"/>
    </div>
    {error&&<p className="mx-5 mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{error}</p>}
    <div className="overflow-x-auto">
@@ -93,7 +98,7 @@ export default function LiveFundTerminal(){
     </table>
    </div>
    {!visible.length&&<p className="py-10 text-center text-xs text-slate-500">{busy?"行情加载中…":"没有匹配的基金记录"}</p>}
-   <div className="flex flex-wrap justify-between gap-2 border-t border-slate-800 px-5 py-3 text-[10px] text-slate-500"><span>本页 {visible.length} / {funds.length} 只基金 · 行情约每60秒刷新</span><span>历史排名数据不是盘中涨跌；估值缺失时明确留空，不用旧涨跌冒充实时值</span></div>
+   <div className="flex flex-wrap justify-between gap-2 border-t border-slate-800 px-5 py-3 text-[10px] text-slate-500"><span>第 {page} 页 · 本页 {visible.length} / {funds.length} 只基金 · 行情约每60秒刷新</span><div className="flex items-center gap-2"><button disabled={page<=1||busy} onClick={()=>setPage(x=>Math.max(1,x-1))} className="rounded border border-slate-700 px-3 py-1.5 text-slate-300 disabled:opacity-30">上一页</button><button disabled={!hasNext||busy} onClick={()=>setPage(x=>x+1)} className="rounded border border-slate-700 px-3 py-1.5 text-slate-300 disabled:opacity-30">下一页</button></div><span>按所选周期收益排名；历史排名不是盘中涨跌，估值缺失时留空</span></div>
   </section>
   <p className="px-1 text-[10px] leading-5 text-slate-500">说明：场内ETF报价来自交易行情接口，可能存在延迟；场外基金盘中估值是基于第三方估值或公开持仓/基准模型的参考值，并非基金公司公布的实时净值。市场休市、数据源限流或基金缺少可验证底层行情时，相关字段会显示为空。{lastError?" 最近一次数据请求提示："+lastError:""}</p>
  </div>;
