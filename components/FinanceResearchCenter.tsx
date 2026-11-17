@@ -171,25 +171,23 @@ export default function FinanceResearchCenter(){
  {section==="industry"&&<div className="space-y-5"><Card title="行业轮动与拥挤度观察" sub="当前数据只覆盖已获取的行业板块行情。完整拥挤度需要估值、成交、波动、换手及基金持仓集中度等历史数据。"><Table heads={["行业","当日涨跌","成交额","动量观察","拥挤度"]}>{boards.slice(0,30).map(b=><tr key={b.code} className="border-b border-slate-50"><td className="px-3 py-3 font-semibold">{b.name}</td><td className={"px-3 py-3 "+cls(b.change)}>{pct(b.change)}</td><td className="px-3 py-3">{b.amount==null?"—":(b.amount/1e8).toFixed(2)+"亿元"}</td><td className="px-3 py-3 text-slate-500">单日行情</td><td className="px-3 py-3 text-slate-400">需历史分位</td></tr>)}</Table></Card><Card title="产业链传导研究框架" sub="新闻事件、产业链环节与基金映射需要有来源的事件数据和成分股映射，暂不自动生成未经核实的因果结论。"><div className="grid gap-3 md:grid-cols-3">{[{t:"上游资源",d:"能源、金属、化工、农产品价格与供给约束。"},{t:"中游制造",d:"产能利用率、订单、库存、资本开支和成本传导。"},{t:"下游需求",d:"消费、汽车、电子、医药、基建和出口需求变化。"}].map(x=><div key={x.t} className="rounded-xl bg-slate-50 p-4"><b className="text-xs">{x.t}</b><p className="mt-2 text-xs leading-6 text-slate-500">{x.d}</p></div>)}</div><div className="mt-4 rounded-xl border border-dashed border-slate-200 p-4"><b className="text-xs">事件研究工作流</b><ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-6 text-slate-500"><li>记录事件来源、发布时间、涉及公司和产业环节。</li><li>区分事实、市场预期和分析假设，记录证据等级。</li><li>映射相关指数、行业板块、ETF及主动基金。</li><li>观察事件前后收益、成交、波动与资金变化。</li><li>复盘逻辑是否兑现，避免把相关性写成因果关系。</li></ol></div></Card><Card title="主题基金映射" sub="从基金库按名称与类型进行主题初筛，需进一步核对基金持仓和业绩基准。"><div className="flex flex-wrap gap-2">{["半导体","人工智能","机器人","创新药","医疗","黄金","有色","新能源","红利","消费","军工","港股互联网"].map(k=><button key={k} onClick={()=>{setSearch(k);setKind("全部类型");setSection("discover");}} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs hover:border-rose-300">{k}</button>)}</div></Card></div>}
  {chosen&&section!=="research"&&<div className="mt-5 space-y-4"><Card title={chosen.name+" · "+chosen.code}><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Stat label="基金类型" value={fundProfile?.classificationLabel||groupType(chosen.type)}/><Stat label="基金经理" value={fundProfile?.manager||"未取得"}/><Stat label="公开规模字段" value={fundProfile?.fundScale==null?"未取得":(fundProfile.fundScale>1e8?(fundProfile.fundScale/1e8).toFixed(2)+"（原始规模字段，单位待核验）":fundProfile.fundScale.toLocaleString()+"（原始字段，单位待核验）")}/><Stat label="风险等级" value={fundProfile?.riskLevel||"未取得"}/><Stat label="管理费字段" value={fundProfile?.managementFee==null?"未取得":fundProfile.managementFee+"（单位/口径待核验）"}/><Stat label="托管费字段" value={fundProfile?.custodyFee==null?"未取得":fundProfile.custodyFee+"（单位/口径待核验）"}/><Stat label="经理任职日期" value={fundProfile?.managerSince||"未取得"}/><Stat label="披露持仓日期" value={fundProfile?.holdingsAsOf||"未取得"}/></div><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs">业绩比较基准</b><p className="mt-2 text-xs leading-6 text-slate-600">{fundProfile?.benchmark||"公开接口未返回基准字段"}</p></div><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs">投资策略</b><p className="mt-2 text-xs leading-6 text-slate-600">{fundProfile?.strategy||"公开接口未返回策略字段"}</p></div></div>{fundProfile?.notes?.length?<ul className="mt-3 list-disc space-y-1 pl-5 text-[10px] leading-5 text-amber-700">{fundProfile.notes.map((x,i)=><li key={i}>{x}</li>)}</ul>:null}<Table heads={["披露资产","代码","资产类别","权重","市场"]}>{(fundProfile?.disclosedHoldings||[]).slice(0,15).map(h=><tr key={h.assetClass+h.code} className="border-b border-slate-50"><td className="px-3 py-2">{h.name}</td><td className="px-3 py-2">{h.code}</td><td className="px-3 py-2">{h.assetClass}</td><td className="px-3 py-2">{pct(h.weight)}</td><td className="px-3 py-2">{h.market}</td></tr>)}</Table><p className="mt-2 text-[10px] text-slate-400">基金经理、规模、费率及持仓以公开接口可取得字段为准；未取得字段明确显示，不以名称推断补全。</p></Card><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Stat label="区间收益" value={pct(detailStats?.total??null)}/><Stat label="最大回撤" value={pct(detailStats?.maxDD??null)}/><Stat label="Sharpe" value={fmt(detailStats?.sharpe)}/><Stat label="波动率" value={pct(detailStats?.vol??null)}/></div><div className="mt-4"><Line points={history}/></div><button onClick={()=>setChosen(null)} className="mt-3 rounded-lg border px-3 py-2 text-xs">关闭详情</button></div>}
  <style jsx global>{`
-.finance-terminal input,.finance-terminal select,.finance-terminal textarea{background:#0b1422!important;border-color:#30435b!important;color:#e2e8f0!important}
-.finance-terminal input::placeholder{color:#64748b!important}
-.finance-terminal .bg-white{background:#101b2b!important}
-.finance-terminal .bg-slate-50{background:#111f31!important}
-.finance-terminal .border-slate-50,.finance-terminal .border-slate-100,.finance-terminal .border-slate-200{border-color:#26364c!important}
-.finance-terminal .text-slate-800,.finance-terminal .text-slate-900{color:#e2e8f0!important}
-.finance-terminal .text-slate-700{color:#cbd5e1!important}
-.finance-terminal .text-slate-300{color:#cbd5e1!important}
-.finance-terminal .text-slate-200{color:#e2e8f0!important}
-.finance-terminal .text-slate-600{color:#94a3b8!important}
-.finance-terminal .text-slate-500{color:#94a3b8!important}
-.finance-terminal .text-slate-400{color:#64748b!important}
-.finance-terminal .bg-rose-50{background:rgba(225,29,72,.13)!important}
-.finance-terminal .bg-emerald-50{background:rgba(16,185,129,.12)!important}
-.finance-terminal .bg-cyan-50{background:rgba(6,182,212,.12)!important}
+.finance-terminal input,.finance-terminal select,.finance-terminal textarea{background:#fff!important;border-color:#cbd5e1!important;color:#1e293b!important}
+.finance-terminal input::placeholder{color:#94a3b8!important}
+.finance-terminal .bg-white{background:#fff!important}
+.finance-terminal .bg-slate-50,.finance-terminal .bg-slate-100{background:#f8fafc!important}
+.finance-terminal .border-slate-50,.finance-terminal .border-slate-100,.finance-terminal .border-slate-200,.finance-terminal .border-slate-800{border-color:#e2e8f0!important}
+.finance-terminal .text-slate-800,.finance-terminal .text-slate-900{color:#0f172a!important}
+.finance-terminal .text-slate-700{color:#334155!important}
+.finance-terminal .text-slate-600{color:#475569!important}
+.finance-terminal .text-slate-500{color:#64748b!important}
+.finance-terminal .text-slate-400{color:#94a3b8!important}
+.finance-terminal .bg-rose-50{background:#fff1f2!important}
+.finance-terminal .bg-emerald-50{background:#ecfdf5!important}
+.finance-terminal .bg-cyan-50{background:#ecfeff!important}
 .finance-terminal button{transition:background-color .15s ease,border-color .15s ease,color .15s ease}
-.finance-terminal button:disabled{opacity:.35}
-.finance-terminal table tbody tr{border-bottom:1px solid #26364c!important}
-.finance-terminal table tbody td{color:#cbd5e1}
+.finance-terminal button:disabled{opacity:.45}
+.finance-terminal table tbody tr{border-bottom:1px solid #e2e8f0!important}
+.finance-terminal table tbody td{color:#334155}
 .finance-terminal a{transition:color .15s ease}
 `}</style><footer className="mt-8 flex flex-wrap justify-between gap-3 border-t border-slate-800 pt-5 text-[10px] text-slate-600"><span>FUNDPULSE RESEARCH TERMINAL · 信息研究用途，不构成投资建议</span><span>公开数据可能延迟；净值、估值、披露持仓与模型结果严格区分。</span></footer></div></section></div></main>;
 }
