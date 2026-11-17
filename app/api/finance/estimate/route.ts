@@ -142,6 +142,6 @@ export async function GET(request:NextRequest){
   output.set(code,{code,estimatedNav:null,change:null,time:null,source:"暂无经过验证的盘中估值",model:type,sourceCount:0,diagnostic:type==="bond"?(bond?.reason||"债基基准估算暂无可验证的行情数据"):type==="overseas"?(overseas?.reason||"海外市场代理估值暂无可验证行情"):type==="commodity"?(commodityProxy?.reason||"已识别为商品策略，但未取得经核验的商品基准/期货合约及汇率数据，拒绝套用股票模型"):type==="fof"?(fofProxy?.reason||"已识别为FOF；未取得可用的底层基金权重与同日净值，拒绝用股票行情代替底层组合"):type==="money"?"货币基金不应使用股票涨跌代理；请以基金公司公布的万份收益/七日年化及净值为准":type==="mixed"?"混合基金的股票、债券、现金等权重未被完整核验，不将部分股票持仓涨跌外推为整只基金收益":type==="index"?(indexProxy?.reason||"指数/联接基金尚未取得可验证的跟踪指数/底层ETF及对应交易日收益，未用不匹配指数代替"):proxy?.reason||"估值源没有当天有效数据；类别："+(typeName[type]||type)});
  }
  const results=codes.map(code=>({...output.get(code)!,analysis:profilesByCode.get(code)}));
- if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"no-store"}});
+ if(request.nextUrl.searchParams.has("code")&&!request.nextUrl.searchParams.has("codes"))return NextResponse.json(results[0],{headers:{"Cache-Control":"public, s-maxage=20, stale-while-revalidate=60"}});
  return NextResponse.json({estimates:results},{headers:{"Cache-Control":"no-store"}});
 }
