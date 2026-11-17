@@ -30,7 +30,7 @@ export default function LiveFundTerminal(){
    const [ir,er,fr]=await Promise.all([
     fetch("/api/finance/indices",{cache:"no-store"}),
     fetch("/api/finance/etf",{cache:"no-store"}),
-    fetch("/api/finance/fund-ranking?period="+period+"&page=1&pageSize=40",{cache:"no-store"})
+    fetch("/api/finance/fund-ranking?period="+period+"&page=1&pageSize=50",{cache:"no-store"})
    ]);
    const [id,ed,fd]=await Promise.all([ir.json(),er.json(),fr.json()]);
    if(ir.ok)setIndices(id.indices||[]);
@@ -38,7 +38,7 @@ export default function LiveFundTerminal(){
    if(!fr.ok)throw new Error(fd.error||"基金行情列表暂不可用");
    const rows=(fd.funds||[]) as FundRow[];
    setFunds(rows);
-   const codes=rows.slice(0,30).map(x=>x.code);
+   const codes=rows.map(x=>x.code);
    if(codes.length){
     const xr=await fetch("/api/finance/estimate?codes="+codes.join(","),{cache:"no-store"});
     const xd=await xr.json();
@@ -93,7 +93,7 @@ export default function LiveFundTerminal(){
     </table>
    </div>
    {!visible.length&&<p className="py-10 text-center text-xs text-slate-500">{busy?"行情加载中…":"没有匹配的基金记录"}</p>}
-   <div className="flex flex-wrap justify-between gap-2 border-t border-slate-800 px-5 py-3 text-[10px] text-slate-500"><span>展示 {visible.length} / {funds.length} 只基金 · 行情约每60秒刷新</span><span>历史排名数据不是盘中涨跌；估值缺失时明确留空，不用旧涨跌冒充实时值</span></div>
+   <div className="flex flex-wrap justify-between gap-2 border-t border-slate-800 px-5 py-3 text-[10px] text-slate-500"><span>本页 {visible.length} / {funds.length} 只基金 · 行情约每60秒刷新</span><span>历史排名数据不是盘中涨跌；估值缺失时明确留空，不用旧涨跌冒充实时值</span></div>
   </section>
   <p className="px-1 text-[10px] leading-5 text-slate-500">说明：场内ETF报价来自交易行情接口，可能存在延迟；场外基金盘中估值是基于第三方估值或公开持仓/基准模型的参考值，并非基金公司公布的实时净值。市场休市、数据源限流或基金缺少可验证底层行情时，相关字段会显示为空。{lastError?" 最近一次数据请求提示："+lastError:""}</p>
  </div>;
