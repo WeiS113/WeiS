@@ -13,9 +13,10 @@ const RK = "weis-finance-removed-codes-v1";
 const BK = "weis-finance-portfolio-backup-v1";
 function validPortfolio(value: any): Portfolio {
   const rawCodes: unknown[] = Array.isArray(value?.codes) ? value.codes : [];
-  const codes = [...new Set(rawCodes.filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x)))];
-  const names = value?.names && typeof value.names === "object" ? value.names as Record<string, string> : {};
   const rawHoldings = value?.holdings && typeof value.holdings === "object" ? value.holdings as Record<string, any> : {};
+  // Include valid codes found only in the holdings map too; do not drop an orphaned saved row.
+  const codes = [...new Set([...rawCodes, ...Object.keys(rawHoldings)].filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x)))];
+  const names = value?.names && typeof value.names === "object" ? value.names as Record<string, string> : {};
   const holdings: Record<string, Holding> = {};
   for (const code of codes) {
     const row = rawHoldings[code];
@@ -57,7 +58,8 @@ function readLocal(): Portfolio {
     const removedRaw: unknown[] = Array.isArray(removedParsed) ? removedParsed : [];
     const removed = new Set<string>(removedRaw.filter((x): x is string => typeof x === "string"));
     const rawCodes: unknown[] = Array.isArray(p?.codes) ? p.codes : [];
-    const validCodes = rawCodes.filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x));
+    const holdingCodes: unknown[] = h && typeof h === "object" ? Object.keys(h) : [];
+    const validCodes = [...rawCodes, ...holdingCodes].filter((x): x is string => typeof x === "string" && /^\d{6}$/.test(x) && !removed.has(x));
     return { codes: [...new Set<string>(validCodes)], names: p?.names || {}, holdings: h || {} };
   } catch { return { codes: [], names: {}, holdings: {} }; }
 }
