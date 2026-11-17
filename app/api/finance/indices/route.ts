@@ -22,5 +22,5 @@ try{
  return {code:x.code,name:String(p.f58||x.name),price:price!==null&&price>0?price:null,change:num(p.f170),time:p.f86?String(p.f86):null};
 }catch{return {code:x.code,name:x.name,price:null,change:null,time:null};}
 }));
-return NextResponse.json({indices:data,refreshedAt:new Date().toISOString(),source:"第三方指数行情（可能延迟）"},{headers:{"Cache-Control":"no-store"}});
+return NextResponse.json({indices:data,refreshedAt:new Date().toISOString(),source:"第三方指数行情（可能延迟）"},{headers:{"Cache-Control":"public, s-maxage=15, stale-while-revalidate=60"}});
 }
