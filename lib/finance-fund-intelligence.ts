@@ -60,7 +60,7 @@ function pickText(data: Obj, pattern: RegExp): string | null {
 async function json(url: string, timeout = 5500): Promise<any> {
   try {
     const response = await fetch(url, {
-      headers: HEADERS, cache: "no-store", signal: AbortSignal.timeout(timeout),
+      headers: HEADERS, next: { revalidate: 3600 }, signal: AbortSignal.timeout(timeout),
     });
     return response.ok ? await response.json() : null;
   } catch { return null; }
@@ -126,7 +126,7 @@ function parseHoldingRows(rows: unknown, assetClass: DisclosedHolding["assetClas
 
 export async function analyzeFundComposition(code: string): Promise<FundIntelligence> {
   const base = "https://fundmobapi.eastmoney.com/FundMNewApi/";
-  const params = "?FCODE=" + encodeURIComponent(code) + "&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid=&_=" + Date.now();
+  const params = "?FCODE=" + encodeURIComponent(code) + "&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid=";
   const [detailResponse, basicResponse, positionResponse] = await Promise.all([
     json(base + "FundMNDetailInformation" + params),
     json(base + "FundMNBasicInformation" + params),
