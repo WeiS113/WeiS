@@ -530,3 +530,13 @@ input.planner-native-checkbox:focus-visible {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;
 }
+
+/* Finance selected controls: muted rose surface with high-contrast white labels. */
+.finance-terminal button[class*="bg-[#c45b68]"] {
+  background-color: #c45b68 !important;
+  color: #ffffff !important;
+  border-color: #c45b68 !important;
+}
+.finance-terminal button[class*="bg-[#c45b68]"] * {
+  color: #ffffff !important;
+}
