@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type IndexQuote = {code:string;name:string;price:number|null;change:number|null;time:string|null};
+type GlobalQuote = {symbol:string;name:string;price:number|null;change:number|null;currency:string|null;exchange:string|null;asOf:string|null;marketState:string|null;source:string;error?:string};
 type FundRow = {code:string;name:string;date:string;nav:number|null;daily:number|null;week:number|null;month:number|null;quarter:number|null;halfYear:number|null;year:number|null;periodReturn:number|null};
 type Estimate = {code:string;name?:string;estimatedNav:number|null;change:number|null;time:string|null;source:string;diagnostic?:string;confidence?:string;model?:string;coverage?:number;analysis?:{classificationLabel?:string}};
 type Etf = {code:string;name:string;price:number|null;change:number|null;amount:number|null;turnover:number|null;time:string|null};
@@ -14,6 +15,8 @@ const num=(v:number|null|undefined,d=4)=>v==null?"—":v.toFixed(d);
 const shortTime=(v:string|null|undefined)=>v?new Date(v.replace(" ","T")).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—";
 export default function LiveFundTerminal(){
  const [indices,setIndices]=useState<IndexQuote[]>([]);
+ const [globalQuotes,setGlobalQuotes]=useState<GlobalQuote[]>([]);
+ const [globalError,setGlobalError]=useState("");
  const [etfs,setEtfs]=useState<Etf[]>([]);
  const [funds,setFunds]=useState<FundRow[]>([]);
  const [estimates,setEstimates]=useState<Record<string,Estimate>>({});
@@ -29,14 +32,16 @@ export default function LiveFundTerminal(){
  const refresh=useCallback(async()=>{
   setBusy(true);setError("");
   try{
-   const [ir,er,fr]=await Promise.all([
+   const [ir,er,gr,fr]=await Promise.all([
     fetch("/api/finance/indices",{cache:"no-store"}),
     fetch("/api/finance/etf",{cache:"no-store"}),
+    fetch("/api/finance/global-market",{cache:"no-store"}),
     fetch("/api/finance/fund-ranking?period="+period+"&page="+page+"&pageSize=50",{cache:"no-store"})
    ]);
-   const [id,ed,fd]=await Promise.all([ir.json(),er.json(),fr.json()]);
+   const [id,ed,gd,fd]=await Promise.all([ir.json(),er.json(),gr.json(),fr.json()]);
    if(ir.ok)setIndices(id.indices||[]);
    if(er.ok)setEtfs(ed.etfs||[]);
+   if(gr.ok){setGlobalQuotes(gd.quotes||[]);setGlobalError(gd.error||"");}else{setGlobalQuotes([]);setGlobalError(gd.error||"全球市场行情暂不可用");}
    if(!fr.ok)throw new Error(fd.error||"基金行情列表暂不可用");
    const rows=(fd.funds||[]) as FundRow[];
    setFunds(rows);
@@ -81,8 +86,14 @@ export default function LiveFundTerminal(){
     {leaders.map(x=><div key={x.code} className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#111e31] px-3 py-2"><div><p className="text-xs font-semibold text-slate-300">{x.name}</p><p className="mt-1 text-[10px] text-slate-500">{x.code} · {x.time||"行情时间未返回"}</p></div><div className="text-right"><p className="text-sm font-bold tabular-nums">{num(x.price,3)}</p><p className={"text-xs font-semibold "+tone(x.change)}>{pct(x.change)}</p></div></div>)}
    </div>
   </section>
-  <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0f1a2b] shadow-[0_8px_30px_rgba(0,0,0,.18)]">
-   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4"><div><h2 className="text-base font-bold text-slate-900">海外市场与全球资产</h2><p className="mt-1 text-[11px] text-slate-500">标普500、纳斯达克、道琼斯、恒生、日经及汇率/大宗商品行情</p></div><span className="text-[10px] text-slate-500">{globalQuotes.find(x=>x.asOf)?.asOf? "数据时间 "+shortTime(globalQuotes.find(x=>x.asOf)!.asOf):"等待全球行情"}</span></div>
+   {globalError&&<p className="mx-5 mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{globalError}</p>}
+   <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-3 xl:grid-cols-5">{globalQuotes.map(x=><div key={x.symbol} className="min-w-0 px-4 py-3"><p className="truncate text-[11px] text-slate-500">{x.name}</p><p className="mt-1 text-base font-bold tabular-nums text-slate-900">{x.price==null?"—":x.price.toLocaleString("zh-CN",{maximumFractionDigits:3})}{x.currency==="%"?"%":""}</p><p className={"mt-1 text-xs font-semibold "+tone(x.change)}>{pct(x.change)}</p><p className="mt-1 text-[9px] text-slate-400">{x.marketState||x.exchange||x.source}{x.error?" · 暂不可用":""}</p></div>)}</div>
+   {!globalQuotes.length&&!globalError&&<p className="py-8 text-center text-xs text-slate-500">全球市场行情加载中…</p>}
+  </section>
+  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
     <div><h2 className="text-base font-bold text-slate-100">基金实时行情 / 盘中估值</h2><p className="mt-1 text-[11px] text-slate-500">估值优先使用当日有效来源；无有效估值时保留最近正式净值和历史涨跌，不将旧数据冒充实时数据</p></div>
     <div className="flex flex-wrap gap-1">{periods.map(([v,label])=><button key={v} onClick={()=>{setPeriod(v);setPage(1);}} className={"rounded-lg px-3 py-2 text-[11px] font-semibold "+(period===v?"bg-rose-600 text-white":"bg-slate-100 text-slate-500")}>{label}排行</button>)}</div>
    </div>
@@ -93,8 +104,8 @@ export default function LiveFundTerminal(){
    {error&&<p className="mx-5 mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{error}</p>}
    <div className="overflow-x-auto">
     <table className="w-full min-w-[930px] text-left text-xs">
-     <thead className="bg-[#0b1422] text-[10px] text-slate-500"><tr><th className="px-5 py-3">基金名称 / 代码</th><th className="px-3 py-3">基金类型</th><th className="px-3 py-3">最新估算净值</th><th className="px-3 py-3">盘中涨跌</th><th className="px-3 py-3">最近正式净值</th><th className="px-3 py-3">近1日</th><th className="px-3 py-3">近1周</th><th className="px-3 py-3">近1月</th><th className="px-3 py-3">近1年</th><th className="px-5 py-3">数据来源 / 时间</th></tr></thead>
-     <tbody>{visible.map(({fund,estimate:e})=><tr key={fund.code} className="border-t border-slate-50 hover:bg-[#0b1422]"><td className="px-5 py-3"><b className="text-slate-100">{fund.name}</b><p className="mt-1 text-[10px] text-slate-500">{fund.code}</p></td><td className="px-3 py-3 text-slate-500">{e?.analysis?.classificationLabel||"待识别"}</td><td className="px-3 py-3 font-semibold tabular-nums">{e?.estimatedNav==null?"—":e.estimatedNav.toFixed(4)}<p className="mt-1 text-[9px] font-normal text-slate-500">{e?.time?shortTime(e.time):"无当日估值"}</p></td><td className={"px-3 py-3 font-bold "+tone(e?.change)}>{pct(e?.change)}</td><td className="px-3 py-3 tabular-nums">{num(fund.nav)}<p className="mt-1 text-[9px] text-slate-500">{fund.date||"净值日期未知"}</p></td><td className={"px-3 py-3 "+tone(fund.daily)}>{pct(fund.daily)}</td><td className={"px-3 py-3 "+tone(fund.week)}>{pct(fund.week)}</td><td className={"px-3 py-3 "+tone(fund.month)}>{pct(fund.month)}</td><td className={"px-3 py-3 "+tone(fund.year)}>{pct(fund.year)}</td><td className="px-5 py-3 text-[10px] text-slate-500"><span className={e?.estimatedNav!=null?"font-semibold text-amber-700":"text-slate-500"}>{e?.estimatedNav!=null?"盘中参考估值":"暂无当日估值"}</span><p className="mt-1 max-w-[220px] leading-4">{e?.source||"历史净值排行接口"}{e?.confidence?" · "+e.confidence+" 置信度":""}</p>{e?.diagnostic&&<p title={e.diagnostic} className="mt-1 max-w-[220px] truncate text-slate-500">{e.diagnostic}</p>}</td></tr>)}</tbody>
+     <thead className="bg-[#0b1422] text-[10px] text-slate-500"><tr><th className="px-5 py-3">基金名称 / 代码</th><th className="px-3 py-3">基金类型</th><th className="px-3 py-3">最新估算净值</th><th className="px-3 py-3">当日涨跌</th><th className="px-3 py-3">最近正式净值</th><th className="px-3 py-3">近1周</th><th className="px-3 py-3">近1月</th><th className="px-3 py-3">近1年</th><th className="px-5 py-3">数据来源 / 时间</th></tr></thead>
+     <tbody>{visible.map(({fund,estimate:e})=><tr key={fund.code} className="border-t border-slate-50 hover:bg-[#0b1422]"><td className="px-5 py-3"><b className="text-slate-100">{fund.name}</b><p className="mt-1 text-[10px] text-slate-500">{fund.code}</p></td><td className="px-3 py-3 text-slate-500">{e?.analysis?.classificationLabel||"待识别"}</td><td className="px-3 py-3 font-semibold tabular-nums">{e?.estimatedNav==null?"—":e.estimatedNav.toFixed(4)}<p className="mt-1 text-[9px] font-normal text-slate-500">{e?.time?shortTime(e.time):"无当日估值"}</p></td><td className={"px-3 py-3 font-bold "+tone(e?.change??fund.daily)}>{pct(e?.change??fund.daily)}<p className="mt-1 text-[9px] font-normal text-slate-500">{e?.change!=null?"盘中参考估值":"最近正式净值日涨跌"}</p></td><td className="px-3 py-3 tabular-nums">{num(fund.nav)}<p className="mt-1 text-[9px] text-slate-500">{fund.date||"净值日期未知"}</p></td><td className={"px-3 py-3 "+tone(fund.week)}>{pct(fund.week)}</td><td className={"px-3 py-3 "+tone(fund.month)}>{pct(fund.month)}</td><td className={"px-3 py-3 "+tone(fund.year)}>{pct(fund.year)}</td><td className="px-5 py-3 text-[10px] text-slate-500"><span className={e?.estimatedNav!=null?"font-semibold text-amber-700":"text-slate-500"}>{e?.estimatedNav!=null?"盘中参考估值":"暂无当日估值"}</span><p className="mt-1 max-w-[220px] leading-4">{e?.source||"历史净值排行接口"}{e?.confidence?" · "+e.confidence+" 置信度":""}</p>{e?.diagnostic&&<p title={e.diagnostic} className="mt-1 max-w-[220px] truncate text-slate-500">{e.diagnostic}</p>}</td></tr>)}</tbody>
     </table>
    </div>
    {!visible.length&&<p className="py-10 text-center text-xs text-slate-500">{busy?"行情加载中…":"没有匹配的基金记录"}</p>}
