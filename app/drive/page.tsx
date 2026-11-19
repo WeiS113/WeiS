@@ -19,6 +19,7 @@ type DriveFile = {
   status: "pending" | "ready" | "failed" | "trashed";
   created_at: string;
   folder_id: string | null;
+  deleted_at: string | null;
 };
 
 type FilterKey = "all" | "images" | "videos" | "documents" | "trash";
@@ -108,10 +109,8 @@ export default function DrivePage() {
         .order("name", { ascending: true }),
       supabase
         .from("drive_files")
-        .select("id,name,mime_type,size_bytes,status,created_at,folder_id")
+        .select("id,name,mime_type,size_bytes,status,created_at,folder_id,deleted_at")
         .eq("user_id", id)
-        .is("deleted_at", null)
-        .neq("status", "trashed")
         .order("created_at", { ascending: false }),
     ]);
 
@@ -144,12 +143,14 @@ export default function DrivePage() {
   }, [loadDrive]);
 
   const visibleFolders = useMemo(
-    () => folders.filter((folder) => folder.parent_id === currentFolder),
-    [folders, currentFolder]
+    () => filter === "trash" ? [] : folders.filter((folder) => folder.parent_id === currentFolder),
+    [folders, currentFolder, filter]
   );
 
   const visibleFiles = useMemo(() => {
-    let result = files.filter((file) => file.folder_id === currentFolder);
+    let result = filter === "trash"
+      ? files.filter((file) => Boolean(file.deleted_at) || file.status === "trashed")
+      : files.filter((file) => file.folder_id === currentFolder && !file.deleted_at && file.status !== "trashed");
     if (filter !== "all" && filter !== "trash") {
       result = result.filter((file) => fileKind(file.mime_type) === filter);
     }
@@ -160,7 +161,7 @@ export default function DrivePage() {
     return result;
   }, [files, currentFolder, filter, search]);
 
-  const totalBytes = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
+  const totalBytes = files.filter((file) => !file.deleted_at && file.status !== "trashed").reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
   const currentFolderName = folders.find((folder) => folder.id === currentFolder)?.name;
 
   async function createFolder() {
