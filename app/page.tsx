@@ -81,7 +81,7 @@ export default function Home() {
       <div className="pointer-events-none absolute -left-32 -top-24 h-96 w-96 rounded-full bg-blue-200/50 blur-[100px]" />
       <div className="pointer-events-none absolute -bottom-32 -right-24 h-96 w-96 rounded-full bg-pink-200/60 blur-[100px]" />
 
-      <div className="relative z-10 mx-auto w-full max-w-5xl">
+      <div className="relative z-10 mx-auto w-full max-w-3xl">
         <header className="mb-12 text-center">
           <p className="mb-3 text-xs font-medium tracking-[0.35em] text-slate-400">
             YOUR PERSONAL SPACE
@@ -94,7 +94,7 @@ export default function Home() {
           </p>
         </header>
 
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {modules.map((module) => (
             <Link
               key={module.title}
